@@ -50,6 +50,17 @@ header.top p {
   font-size: 0.85rem;
 }
 
+header.top.compact {
+  padding: 10px 16px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+header.top.compact h1 {
+  font-size: 1.1rem;
+}
+
 .banner {
   background: #fff3e0;
   color: #8a4b00;
@@ -353,4 +364,133 @@ select {
   font-weight: 700;
   font-size: 1rem;
   text-align: center;
+}
+
+/* Serving page: compact side-by-side layout so all player rows and all
+   scoring buttons are visible together, no scrolling, right-thumb reach. */
+.quick-controls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 10px 12px 0;
+}
+
+.quick-controls select {
+  flex: 1.4;
+  min-width: 0;
+  padding: 10px 8px;
+  font-size: 0.9rem;
+}
+
+.quick-controls input {
+  width: 64px;
+  flex: none;
+  padding: 10px 6px;
+  font-size: 0.9rem;
+  text-align: center;
+  border-radius: 10px;
+  border: 1px solid #cdd6df;
+  background: var(--bg);
+}
+
+.quick-controls button {
+  flex: none;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #cdd6df;
+  background: white;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.serving-app .toast {
+  margin: 0 12px;
+  padding: 6px;
+  min-height: 1em;
+  font-size: 0.8rem;
+}
+
+.evaluator-grid {
+  display: grid !important;
+  grid-template-columns: 1fr 84px;
+  gap: 8px;
+  align-items: start;
+  padding: 8px 12px 12px !important;
+  flex: 1;
+}
+
+.rows-col {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.rows-col .row-btn {
+  padding: 9px 10px;
+  font-size: 0.82rem;
+  border-radius: 8px;
+}
+
+.rows-col .row-btn.active {
+  transform: scale(1.02);
+  font-size: 0.88rem;
+}
+
+.rows-col .row-btn span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.score-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.active-player-mini {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.2;
+  min-height: 2.2em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.score-mini {
+  text-align: center;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--navy);
+  line-height: 1;
+}
+
+.rail-btn {
+  width: 100%;
+  min-height: 44px;
+  padding: 6px 4px;
+  font-size: 0.75rem;
+  line-height: 1.1;
+  border-radius: 8px;
+}
+
+.rail-btn .pts {
+  font-size: 0.6rem;
+}
+
+.rail-log {
+  background: var(--orange);
+  color: white;
+  border: none;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.rail-log:disabled {
+  background: var(--gray-light);
+  color: var(--gray);
+  cursor: not-allowed;
 }

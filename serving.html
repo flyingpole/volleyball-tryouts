@@ -7,10 +7,10 @@
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-<div class="app">
-  <header class="top">
-    <h1>Serving Evaluation</h1>
-    <p><a class="back-link" href="index.html" style="color:#c3d0e0;">&larr; Skills</a></p>
+<div class="app serving-app">
+  <header class="top compact">
+    <h1>Serving</h1>
+    <a class="back-link" href="index.html" style="color:#c3d0e0;">&larr; Skills</a>
   </header>
 
   <div id="configBanner" class="banner" hidden>
@@ -18,52 +18,29 @@
     and paste its URL into <code>config.js</code> — see README.md.
   </div>
 
-  <main>
-    <div class="field">
-      <label for="coachSelect">Coach</label>
-      <select id="coachSelect">
-        <option value="">Select coach…</option>
-      </select>
-    </div>
+  <div class="quick-controls">
+    <select id="coachSelect" aria-label="Coach">
+      <option value="">Coach…</option>
+    </select>
+    <input type="text" inputmode="numeric" id="startNumberInput" placeholder="Start #" aria-label="Starting player number" />
+    <button type="button" id="loadGroupBtn">Load</button>
+  </div>
 
-    <div class="field">
-      <label for="startNumberInput">Evaluating players starting at #</label>
-      <div class="coach-row">
-        <input type="text" inputmode="numeric" id="startNumberInput" placeholder="e.g. 11" />
-        <button type="button" id="loadGroupBtn">Load</button>
-      </div>
-    </div>
+  <div class="toast" id="toast"></div>
 
-    <div class="field">
-      <label>Players</label>
-      <div id="playerRows"></div>
-    </div>
+  <main class="evaluator-grid">
+    <div id="playerRows" class="rows-col"></div>
 
-    <div class="scoring-panel">
-      <div class="active-player" id="activePlayerLabel">Load a player group above</div>
+    <div class="score-rail">
+      <div class="active-player-mini" id="activePlayerLabel">Load a group</div>
+      <div class="score-mini" id="scoreNum">0</div>
 
-      <div class="btn-group cols-2">
-        <button type="button" class="toggle result" id="btnMissed" data-result="missed">MISSED<span class="pts">0 pts</span></button>
-        <button type="button" class="toggle result velocity" id="btnV1" data-result="under30">&lt;30 mph<span class="pts">1 pt</span></button>
-        <button type="button" class="toggle result velocity" id="btnV2" data-result="30to35">30-35 mph<span class="pts">2 pt</span></button>
-        <button type="button" class="toggle result velocity" id="btnV3" data-result="over35">&gt;35 mph<span class="pts">3 pt</span></button>
-      </div>
-
-      <button type="button" class="toggle" id="btnHitTarget" disabled>HIT TARGET<span class="pts">+1 pt</span></button>
-
-      <div class="score-preview">
-        <div class="num" id="scoreNum">0</div>
-        <div class="label">Points this attempt</div>
-      </div>
-
-      <button type="button" class="log-btn" id="logBtn" disabled>Log Attempt</button>
-
-      <div class="toast" id="toast"></div>
-    </div>
-
-    <div class="session-log">
-      <strong>This session</strong>
-      <ul id="sessionList"></ul>
+      <button type="button" class="toggle result rail-btn" id="btnMissed" data-result="missed">MISS<span class="pts">0</span></button>
+      <button type="button" class="toggle result velocity rail-btn" id="btnV1" data-result="under30">&lt;30<span class="pts">1pt</span></button>
+      <button type="button" class="toggle result velocity rail-btn" id="btnV2" data-result="30to35">30-35<span class="pts">2pt</span></button>
+      <button type="button" class="toggle result velocity rail-btn" id="btnV3" data-result="over35">&gt;35<span class="pts">3pt</span></button>
+      <button type="button" class="toggle rail-btn" id="btnHitTarget" disabled>TARGET<span class="pts">+1pt</span></button>
+      <button type="button" class="rail-btn rail-log" id="logBtn" disabled>LOG</button>
     </div>
   </main>
 </div>

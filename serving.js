@@ -7,7 +7,6 @@ let activeIndex = null; // index into visiblePlayers
 let result = null; // "missed" | "under30" | "30to35" | "over35" | null
 let hitTarget = false;
 const sessionTallies = {}; // playerNumber -> { attempts, points }
-const sessionLog = [];
 
 const els = {
   banner: document.getElementById("configBanner"),
@@ -24,7 +23,6 @@ const els = {
   scoreNum: document.getElementById("scoreNum"),
   logBtn: document.getElementById("logBtn"),
   toast: document.getElementById("toast"),
-  sessionList: document.getElementById("sessionList"),
 };
 
 const resultButtons = [els.btnMissed, els.btnV1, els.btnV2, els.btnV3];
@@ -72,8 +70,8 @@ function selectPlayer(idx) {
 function refreshUI() {
   const p = activePlayer();
   els.activePlayerLabel.textContent = p
-    ? `Scoring #${p.playerNumber} — ${p.playerName || "(unnamed)"}`
-    : (visiblePlayers.length ? "Tap a player above" : "Load a player group above");
+    ? `#${p.playerNumber} ${p.playerName || "(unnamed)"}`
+    : (visiblePlayers.length ? "Tap a player" : "Load a group");
 
   resultButtons.forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.result === result);
@@ -193,8 +191,6 @@ els.logBtn.addEventListener("click", async () => {
     const prev = sessionTallies[p.playerNumber] || { attempts: 0, points: 0 };
     sessionTallies[p.playerNumber] = { attempts: prev.attempts + 1, points: prev.points + pts };
 
-    sessionLog.unshift({ ...p, points: pts, time: new Date().toLocaleTimeString() });
-    renderSessionLog();
     setToast(`✓ Logged: #${p.playerNumber} ${p.playerName} — ${pts} pts`, false);
 
     // Players serve in numerical order, so move on to the next one automatically.
@@ -210,14 +206,5 @@ els.logBtn.addEventListener("click", async () => {
     refreshUI();
   }
 });
-
-function renderSessionLog() {
-  els.sessionList.innerHTML = "";
-  sessionLog.slice(0, 20).forEach((entry) => {
-    const li = document.createElement("li");
-    li.textContent = `${entry.time} — #${entry.playerNumber} ${entry.playerName}: ${entry.points} pts`;
-    els.sessionList.appendChild(li);
-  });
-}
 
 init();
