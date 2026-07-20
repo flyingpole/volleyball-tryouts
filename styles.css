@@ -286,3 +286,71 @@ button.velocity.active .pts {
   font-weight: 600;
   cursor: pointer;
 }
+
+select {
+  font-size: 1rem;
+  padding: 14px;
+  border-radius: 10px;
+  border: 1px solid #cdd6df;
+  background: var(--bg);
+  color: var(--text);
+}
+
+#playerRows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.row-btn {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 2px solid var(--gray-light);
+  background: white;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.row-btn .tally {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--gray);
+  white-space: nowrap;
+}
+
+.row-btn.active {
+  border-color: var(--orange);
+  background: var(--orange);
+  color: white;
+  transform: scale(1.03);
+  font-size: 1.1rem;
+}
+
+.row-btn.active .tally {
+  color: #ffe6da;
+}
+
+.scoring-panel {
+  position: sticky;
+  bottom: 0;
+  background: var(--card);
+  padding: 14px 0 4px;
+  border-top: 2px solid var(--gray-light);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.active-player {
+  font-weight: 700;
+  font-size: 1rem;
+  text-align: center;
+}

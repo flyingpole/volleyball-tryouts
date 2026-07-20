@@ -25,6 +25,13 @@ async function fetchRoster() {
   return data.players || [];
 }
 
+async function fetchCoaches() {
+  const res = await fetch(`${CONFIG.SCRIPT_URL}?action=coaches`);
+  if (!res.ok) throw new Error(`Coach list fetch failed (${res.status})`);
+  const data = await res.json();
+  return data.coaches || [];
+}
+
 // Apps Script Web Apps don't send CORS headers for JSON content types,
 // so we POST as text/plain (the default) to avoid a preflight request.
 // doPost() on the server reads e.postData.contents and JSON.parses it.

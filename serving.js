@@ -1,18 +1,21 @@
 const SKILL = "Serving";
+const GROUP_SIZE = 10;
 
 let roster = [];
-let selectedPlayer = null; // { playerNumber, playerName }
+let visiblePlayers = []; // up to 10 roster entries in the loaded number range, ascending
+let activeIndex = null; // index into visiblePlayers
 let result = null; // "missed" | "under30" | "30to35" | "over35" | null
 let hitTarget = false;
+const sessionTallies = {}; // playerNumber -> { attempts, points }
 const sessionLog = [];
 
 const els = {
   banner: document.getElementById("configBanner"),
-  coachName: document.getElementById("coachName"),
-  saveCoachBtn: document.getElementById("saveCoachBtn"),
-  playerInput: document.getElementById("playerInput"),
-  playerList: document.getElementById("playerList"),
-  playerInfo: document.getElementById("playerInfo"),
+  coachSelect: document.getElementById("coachSelect"),
+  startNumberInput: document.getElementById("startNumberInput"),
+  loadGroupBtn: document.getElementById("loadGroupBtn"),
+  playerRows: document.getElementById("playerRows"),
+  activePlayerLabel: document.getElementById("activePlayerLabel"),
   btnMissed: document.getElementById("btnMissed"),
   btnV1: document.getElementById("btnV1"),
   btnV2: document.getElementById("btnV2"),
@@ -32,7 +35,46 @@ function computeScore() {
   return BASE_POINTS[result] + (hitTarget ? 1 : 0);
 }
 
+function activePlayer() {
+  return activeIndex === null ? null : visiblePlayers[activeIndex];
+}
+
+function renderRows() {
+  els.playerRows.innerHTML = "";
+  visiblePlayers.forEach((p, idx) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "row-btn" + (idx === activeIndex ? " active" : "");
+
+    const label = document.createElement("span");
+    label.textContent = `#${p.playerNumber} — ${p.playerName || "(unnamed)"}`;
+    btn.appendChild(label);
+
+    const tally = sessionTallies[p.playerNumber];
+    const tallySpan = document.createElement("span");
+    tallySpan.className = "tally";
+    tallySpan.textContent = tally ? `${tally.attempts} att · ${tally.points} pts` : "";
+    btn.appendChild(tallySpan);
+
+    btn.addEventListener("click", () => selectPlayer(idx));
+    els.playerRows.appendChild(btn);
+  });
+}
+
+function selectPlayer(idx) {
+  activeIndex = idx;
+  result = null;
+  hitTarget = false;
+  renderRows();
+  refreshUI();
+}
+
 function refreshUI() {
+  const p = activePlayer();
+  els.activePlayerLabel.textContent = p
+    ? `Scoring #${p.playerNumber} — ${p.playerName || "(unnamed)"}`
+    : (visiblePlayers.length ? "Tap a player above" : "Load a player group above");
+
   resultButtons.forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.result === result);
   });
@@ -42,13 +84,7 @@ function refreshUI() {
   els.btnHitTarget.classList.toggle("active", madeIt && hitTarget);
 
   els.scoreNum.textContent = computeScore();
-  els.logBtn.disabled = !selectedPlayer || !result || !isScriptConfigured();
-}
-
-function resetAttempt() {
-  result = null;
-  hitTarget = false;
-  refreshUI();
+  els.logBtn.disabled = !p || !result || !isScriptConfigured();
 }
 
 function setToast(message, isError) {
@@ -56,25 +92,33 @@ function setToast(message, isError) {
   els.toast.className = "toast " + (isError ? "error" : "success");
 }
 
-function findPlayerFromInputValue(value) {
-  const match = value.match(/^(\d+)\s/);
-  if (!match) return null;
-  const num = match[1];
-  return roster.find((p) => String(p.playerNumber) === num) || null;
-}
+function loadGroup() {
+  const start = parseInt(els.startNumberInput.value, 10);
+  if (!Number.isFinite(start)) {
+    setToast("Enter a starting player number.", true);
+    return;
+  }
+  visiblePlayers = roster
+    .filter((p) => {
+      const n = Number(p.playerNumber);
+      return n >= start && n < start + GROUP_SIZE;
+    })
+    .sort((a, b) => Number(a.playerNumber) - Number(b.playerNumber));
 
-function populatePlayerList() {
-  els.playerList.innerHTML = "";
-  roster.forEach((p) => {
-    const opt = document.createElement("option");
-    opt.value = `${p.playerNumber} — ${p.playerName}`;
-    els.playerList.appendChild(opt);
-  });
+  activeIndex = visiblePlayers.length ? 0 : null;
+  result = null;
+  hitTarget = false;
+  renderRows();
+  refreshUI();
+
+  if (!visiblePlayers.length) {
+    setToast(`No roster players found from #${start} to #${start + GROUP_SIZE - 1}.`, true);
+  } else {
+    setToast("", false);
+  }
 }
 
 async function init() {
-  els.coachName.value = getSavedCoach();
-
   if (!isScriptConfigured()) {
     els.banner.hidden = false;
     refreshUI();
@@ -82,30 +126,35 @@ async function init() {
   }
 
   try {
-    roster = await fetchRoster();
-    populatePlayerList();
+    const [coaches, players] = await Promise.all([fetchCoaches(), fetchRoster()]);
+    coaches.forEach((name) => {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name;
+      els.coachSelect.appendChild(opt);
+    });
+    const saved = getSavedCoach();
+    if (saved && coaches.includes(saved)) els.coachSelect.value = saved;
+
+    roster = players;
   } catch (err) {
-    setToast(`Couldn't load roster: ${err.message}`, true);
+    setToast(`Couldn't load setup data: ${err.message}`, true);
   }
   refreshUI();
 }
 
-els.saveCoachBtn.addEventListener("click", () => {
-  saveCoach(els.coachName.value);
-  setToast("Coach name saved.", false);
+els.coachSelect.addEventListener("change", () => {
+  saveCoach(els.coachSelect.value);
 });
 
-els.playerInput.addEventListener("input", () => {
-  const p = findPlayerFromInputValue(els.playerInput.value);
-  selectedPlayer = p;
-  els.playerInfo.textContent = p
-    ? `Grade ${p.grade || "—"} · Positions: ${p.positions || "—"}`
-    : "";
-  refreshUI();
+els.loadGroupBtn.addEventListener("click", loadGroup);
+els.startNumberInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") loadGroup();
 });
 
 resultButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
+    if (!activePlayer()) return;
     result = result === btn.dataset.result ? null : btn.dataset.result;
     if (!result || result === "missed") hitTarget = false;
     refreshUI();
@@ -119,18 +168,18 @@ els.btnHitTarget.addEventListener("click", () => {
 });
 
 els.logBtn.addEventListener("click", async () => {
-  if (!selectedPlayer || !result) return;
-  const coach = els.coachName.value.trim();
+  const p = activePlayer();
+  if (!p || !result) return;
+  const coach = els.coachSelect.value;
   if (!coach) {
-    setToast("Enter your coach name first.", true);
+    setToast("Select your coach name first.", true);
     return;
   }
-  saveCoach(coach);
 
   const payload = {
     coach,
-    playerNumber: selectedPlayer.playerNumber,
-    playerName: selectedPlayer.playerName,
+    playerNumber: p.playerNumber,
+    playerName: p.playerName,
     skill: SKILL,
     result,
     hitTarget,
@@ -140,14 +189,25 @@ els.logBtn.addEventListener("click", async () => {
   try {
     const response = await postAttempt(payload);
     const pts = response.points ?? computeScore();
-    setToast(`✓ Logged: #${selectedPlayer.playerNumber} ${selectedPlayer.playerName} — ${pts} pts`, false);
-    sessionLog.unshift({ ...selectedPlayer, points: pts, time: new Date().toLocaleTimeString() });
+
+    const prev = sessionTallies[p.playerNumber] || { attempts: 0, points: 0 };
+    sessionTallies[p.playerNumber] = { attempts: prev.attempts + 1, points: prev.points + pts };
+
+    sessionLog.unshift({ ...p, points: pts, time: new Date().toLocaleTimeString() });
     renderSessionLog();
-    resetAttempt();
+    setToast(`✓ Logged: #${p.playerNumber} ${p.playerName} — ${pts} pts`, false);
+
+    // Players serve in numerical order, so move on to the next one automatically.
+    if (visiblePlayers.length) {
+      activeIndex = (activeIndex + 1) % visiblePlayers.length;
+    }
+    result = null;
+    hitTarget = false;
+    renderRows();
+    refreshUI();
   } catch (err) {
     setToast(`Failed to log attempt: ${err.message}`, true);
-  } finally {
-    els.logBtn.disabled = !selectedPlayer || !result || !isScriptConfigured();
+    refreshUI();
   }
 });
 

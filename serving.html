@@ -20,43 +20,46 @@
 
   <main>
     <div class="field">
-      <label for="coachName">Coach</label>
+      <label for="coachSelect">Coach</label>
+      <select id="coachSelect">
+        <option value="">Select coach…</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="startNumberInput">Evaluating players starting at #</label>
       <div class="coach-row">
-        <input type="text" id="coachName" placeholder="Your name" />
-        <button type="button" id="saveCoachBtn">Save</button>
+        <input type="text" inputmode="numeric" id="startNumberInput" placeholder="e.g. 11" />
+        <button type="button" id="loadGroupBtn">Load</button>
       </div>
     </div>
 
     <div class="field">
-      <label for="playerInput">Player</label>
-      <input type="text" id="playerInput" list="playerList" placeholder="Search # or name" autocomplete="off" />
-      <datalist id="playerList"></datalist>
-      <div class="player-info" id="playerInfo"></div>
+      <label>Players</label>
+      <div id="playerRows"></div>
     </div>
 
-    <div class="field">
-      <label>Result</label>
+    <div class="scoring-panel">
+      <div class="active-player" id="activePlayerLabel">Load a player group above</div>
+
       <div class="btn-group cols-2">
         <button type="button" class="toggle result" id="btnMissed" data-result="missed">MISSED<span class="pts">0 pts</span></button>
         <button type="button" class="toggle result velocity" id="btnV1" data-result="under30">&lt;30 mph<span class="pts">1 pt</span></button>
         <button type="button" class="toggle result velocity" id="btnV2" data-result="30to35">30-35 mph<span class="pts">2 pt</span></button>
         <button type="button" class="toggle result velocity" id="btnV3" data-result="over35">&gt;35 mph<span class="pts">3 pt</span></button>
       </div>
-    </div>
 
-    <div class="field">
-      <label>Bonus (only if made)</label>
       <button type="button" class="toggle" id="btnHitTarget" disabled>HIT TARGET<span class="pts">+1 pt</span></button>
+
+      <div class="score-preview">
+        <div class="num" id="scoreNum">0</div>
+        <div class="label">Points this attempt</div>
+      </div>
+
+      <button type="button" class="log-btn" id="logBtn" disabled>Log Attempt</button>
+
+      <div class="toast" id="toast"></div>
     </div>
-
-    <div class="score-preview">
-      <div class="num" id="scoreNum">0</div>
-      <div class="label">Points this attempt</div>
-    </div>
-
-    <button type="button" class="log-btn" id="logBtn" disabled>Log Attempt</button>
-
-    <div class="toast" id="toast"></div>
 
     <div class="session-log">
       <strong>This session</strong>

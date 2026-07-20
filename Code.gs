@@ -6,14 +6,23 @@
 const SHEETS = {
   ROSTER: "Roster",
   LOG: "Log",
-  MASTER: "Master",
+  SUMMARY: "Summary Sheet",
   SERVING_RANKINGS: "Serving Rankings",
 };
+
+// Fixed list of coaches/evaluators — each gets their own tab, and the app's
+// coach picker is a dropdown built from this list (no free-text typing).
+// Add or rename names here, then re-run setupSheet() to build/rebuild tabs.
+const COACHES = [
+  "Darin", "Karen", "Morgan", "Tahya", "David",
+  "Evaluator 1", "Evaluator 2", "Evaluator 3",
+];
+
 const RESERVED_SHEETS = Object.values(SHEETS);
 
-// Skill columns on Master / each coach tab, in sheet order (columns E-I).
+// Skill columns on Summary Sheet / each coach tab, in sheet order (E-I).
 // Add an entry here (and a matching *Rankings sheet) when a new skill's
-// scoring UI ships — Master/coach tab formulas pick it up automatically.
+// scoring UI ships — Summary Sheet/coach tab formulas pick it up automatically.
 const SKILLS = [
   { name: "Serving", col: "E" },
   { name: "Passing", col: "F" },
@@ -37,14 +46,17 @@ const FLAG_SCORE_GAP = 0.3;
 
 // ---------------------------------------------------------------------------
 // One-time setup. Run this manually from the Apps Script editor after pasting
-// this file in. Safe to re-run (it rebuilds the computed tabs from scratch —
-// Roster and any coach tabs are left alone).
+// this file in. Safe to re-run (it rebuilds every computed tab from scratch —
+// only Roster's player data is left alone).
 // ---------------------------------------------------------------------------
 function setupSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   setupRosterSheet(ss);
   setupLogSheet(ss);
-  buildAggregateSheet(getOrCreateSheet(ss, SHEETS.MASTER), null);
+  buildAggregateSheet(getOrCreateSheet(ss, SHEETS.SUMMARY), null);
+  COACHES.forEach((coach) => {
+    buildAggregateSheet(getOrCreateSheet(ss, coach), coach);
+  });
   buildSkillRankingsSheet(getOrCreateSheet(ss, SHEETS.SERVING_RANKINGS), "Serving", "E");
 }
 
@@ -70,12 +82,12 @@ function setupLogSheet(ss) {
   sheet.setFrozenRows(1);
 }
 
-// Builds (or rebuilds) a per-player summary sheet: Master when coachFilter is
-// null (aggregates every coach), or a single coach's tab when coachFilter is
-// that coach's name. Every cell is a plain formula tied to a specific row, so
-// the sheet stays live as the Log tab grows — no script recompute needed.
-// Columns: Player #, Name, Positions, Grade, then one avg-score column per
-// skill in SKILLS.
+// Builds (or rebuilds) a per-player summary sheet: the Summary Sheet when
+// coachFilter is null (aggregates every coach), or a single coach's tab when
+// coachFilter is that coach's name. Every cell is a plain formula tied to a
+// specific row, so the sheet stays live as the Log tab grows — no script
+// recompute needed. Columns: Player #, Name, Positions, Grade, then one
+// avg-score column per skill in SKILLS.
 function buildAggregateSheet(sheet, coachFilter) {
   sheet.clear();
   const headers = ["Player #", "Name", "Positions", "Grade"].concat(SKILLS.map((s) => s.name));
@@ -111,9 +123,9 @@ function buildAggregateSheet(sheet, coachFilter) {
 
 // Builds a ranking/triage sheet for one skill: sorted by that skill's avg
 // score (optionally filtered by position), with attempt/coach counts and a
-// "needs more looks" flag. Call this again with a new skill name + Master
-// column letter (see SKILLS) when a new skill's evaluation UI ships.
-function buildSkillRankingsSheet(sheet, skillName, masterColLetter) {
+// "needs more looks" flag. Call this again with a new skill name + Summary
+// Sheet column letter (see SKILLS) when a new skill's evaluation UI ships.
+function buildSkillRankingsSheet(sheet, skillName, summaryColLetter) {
   sheet.clear();
   sheet.getRange("A1").setValue("Position filter:").setFontWeight("bold");
   sheet.getRange("B1").setValue("All");
@@ -127,9 +139,9 @@ function buildSkillRankingsSheet(sheet, skillName, masterColLetter) {
   sheet.setFrozenRows(3);
 
   const lastRow = 1 + ROSTER_MAX_ROWS;
-  const select = `A,B,C,D,${masterColLetter}`;
+  const select = `A,B,C,D,${summaryColLetter}`;
   sheet.getRange("B4").setFormula(
-    `=IFERROR(QUERY(Master!$A$2:$I$${lastRow}, IF($B$1="All", "select ${select} where A is not null order by ${masterColLetter} desc", "select ${select} where A is not null and C contains '"&$B$1&"' order by ${masterColLetter} desc"), 0), "")`
+    `=IFERROR(QUERY('${SHEETS.SUMMARY}'!$A$2:$I$${lastRow}, IF($B$1="All", "select ${select} where A is not null order by ${summaryColLetter} desc", "select ${select} where A is not null and C contains '"&$B$1&"' order by ${summaryColLetter} desc"), 0), "")`
   );
 
   const colA = [], colG = [], colH = [], colI = [];
@@ -153,7 +165,7 @@ function doGet(e) {
   const action = e.parameter.action;
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   if (action === "roster") return jsonResponse({ players: readRoster(ss) });
-  if (action === "coaches") return jsonResponse({ coaches: listCoachSheets(ss) });
+  if (action === "coaches") return jsonResponse({ coaches: COACHES });
   return jsonResponse({ status: "ok" });
 }
 
@@ -182,6 +194,8 @@ function doPost(e) {
       result, hitTarget, points,
     ]);
 
+    // Coaches normally already have a tab from setupSheet(); this is just a
+    // safety net if a name outside the COACHES list ever posts an attempt.
     ensureCoachSheet(ss, coach);
 
     return jsonResponse({ success: true, points });
@@ -239,12 +253,6 @@ function readRoster(ss) {
     players.push({ playerNumber, playerName, positions: positions || "", grade: grade || "" });
   });
   return players;
-}
-
-function listCoachSheets(ss) {
-  return ss.getSheets()
-    .map((s) => s.getName())
-    .filter((name) => RESERVED_SHEETS.indexOf(name) === -1);
 }
 
 function jsonResponse(obj) {
