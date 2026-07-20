@@ -32,15 +32,16 @@
     <div id="playerRows" class="rows-col"></div>
 
     <div class="score-rail">
+      <button type="button" class="rail-btn rail-undo" id="undoBtn" disabled>UNDO</button>
       <div class="active-player-mini" id="activePlayerLabel">Load a group</div>
-      <div class="score-mini" id="scoreNum">0</div>
+      <div class="score-mini" id="scoreNum">–</div>
 
       <button type="button" class="toggle result rail-btn" id="btnMissed" data-result="missed">MISS<span class="pts">0</span></button>
       <button type="button" class="toggle result velocity rail-btn" id="btnV1" data-result="under30">&lt;30<span class="pts">1pt</span></button>
       <button type="button" class="toggle result velocity rail-btn" id="btnV2" data-result="30to35">30-35<span class="pts">2pt</span></button>
       <button type="button" class="toggle result velocity rail-btn" id="btnV3" data-result="over35">&gt;35<span class="pts">3pt</span></button>
-      <button type="button" class="toggle rail-btn" id="btnHitTarget" disabled>TARGET<span class="pts">+1pt</span></button>
-      <button type="button" class="rail-btn rail-log" id="logBtn" disabled>LOG</button>
+      <button type="button" class="toggle rail-btn" id="btnHitTarget" disabled>TGT ✓<span class="pts">+1pt</span></button>
+      <button type="button" class="toggle rail-btn" id="btnMissedTarget" disabled>TGT ✗<span class="pts">+0</span></button>
     </div>
   </main>
 </div>

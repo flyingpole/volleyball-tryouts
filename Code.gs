@@ -172,35 +172,85 @@ function doGet(e) {
 function doPost(e) {
   try {
     const body = JSON.parse(e.postData.contents);
-    const coach = String(body.coach || "").trim();
-    const skill = String(body.skill || "").trim();
-    const playerNumber = String(body.playerNumber || "").trim();
-    const result = String(body.result || "").trim(); // "missed" | "under30" | "30to35" | "over35"
-    if (!coach || !skill || !playerNumber || !result) {
-      throw new Error("Missing coach, skill, playerNumber, or result");
-    }
-    if (RESERVED_SHEETS.indexOf(coach) !== -1) {
-      throw new Error(`Coach name "${coach}" conflicts with a reserved sheet name`);
-    }
-
-    const hitTarget = !!body.hitTarget;
-    const points = computeServingScore(result, hitTarget);
-
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const playerName = ensureRosterRow(ss, playerNumber, body.playerName || "");
+    if (body.action === "undo") return handleUndo(ss, body);
+    return handleLogAttempt(ss, body);
+  } catch (err) {
+    return jsonResponse({ success: false, error: String(err) });
+  }
+}
 
-    ss.getSheetByName(SHEETS.LOG).appendRow([
+function handleLogAttempt(ss, body) {
+  const coach = String(body.coach || "").trim();
+  const skill = String(body.skill || "").trim();
+  const playerNumber = String(body.playerNumber || "").trim();
+  const result = String(body.result || "").trim(); // "missed" | "under30" | "30to35" | "over35"
+  if (!coach || !skill || !playerNumber || !result) {
+    throw new Error("Missing coach, skill, playerNumber, or result");
+  }
+  if (RESERVED_SHEETS.indexOf(coach) !== -1) {
+    throw new Error(`Coach name "${coach}" conflicts with a reserved sheet name`);
+  }
+
+  const hitTarget = !!body.hitTarget;
+  const points = computeServingScore(result, hitTarget);
+
+  // Multiple coaches submit concurrently during tryouts, so the append +
+  // "which row did I just write" read has to be atomic across requests.
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  let playerName, rowNumber;
+  try {
+    playerName = ensureRosterRow(ss, playerNumber, body.playerName || "");
+    const logSheet = ss.getSheetByName(SHEETS.LOG);
+    logSheet.appendRow([
       new Date(), coach, playerNumber, playerName, skill,
       result, hitTarget, points,
     ]);
+    rowNumber = logSheet.getLastRow();
+  } finally {
+    lock.releaseLock();
+  }
 
+  try {
     // Coaches normally already have a tab from setupSheet(); this is just a
     // safety net if a name outside the COACHES list ever posts an attempt.
     ensureCoachSheet(ss, coach);
-
-    return jsonResponse({ success: true, points });
   } catch (err) {
-    return jsonResponse({ success: false, error: String(err) });
+    // Non-fatal — the attempt above is already safely logged. A concurrent
+    // request may have just created this same tab.
+  }
+
+  return jsonResponse({ success: true, points, rowNumber });
+}
+
+// Deletes one Log row by its exact row number, only if it still belongs to
+// the requesting coach (guards against a race where row numbers shifted).
+// Summary Sheet / coach tabs / Rankings all recompute automatically since
+// they're live formulas over Log.
+function handleUndo(ss, body) {
+  const coach = String(body.coach || "").trim();
+  const rowNumber = parseInt(body.rowNumber, 10);
+  if (!coach || !Number.isInteger(rowNumber) || rowNumber < 2) {
+    throw new Error("Missing coach or rowNumber for undo");
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const logSheet = ss.getSheetByName(SHEETS.LOG);
+    if (rowNumber > logSheet.getLastRow()) {
+      throw new Error("That attempt is no longer there to undo");
+    }
+    const row = logSheet.getRange(rowNumber, 1, 1, 8).getValues()[0];
+    const [, rowCoach, playerNumber, playerName, , , , points] = row;
+    if (String(rowCoach) !== coach) {
+      throw new Error("That attempt no longer matches — can't undo");
+    }
+    logSheet.deleteRow(rowNumber);
+    return jsonResponse({ success: true, playerNumber, playerName, points });
+  } finally {
+    lock.releaseLock();
   }
 }
 

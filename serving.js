@@ -1,11 +1,13 @@
 const SKILL = "Serving";
 const GROUP_SIZE = 10;
+const BASE_POINTS = { under30: 1, "30to35": 2, over35: 3 };
 
 let roster = [];
 let visiblePlayers = []; // up to 10 roster entries in the loaded number range, ascending
 let activeIndex = null; // index into visiblePlayers
-let result = null; // "missed" | "under30" | "30to35" | "over35" | null
-let hitTarget = false;
+let pendingResult = null; // "under30" | "30to35" | "over35" | null — set by a velocity tap, cleared on submit
+let isSubmitting = false; // guards against double-taps while a request is in flight
+let lastLogged = null; // { rowNumber, coach, playerNumber, playerName, points } — one level of undo
 const sessionTallies = {}; // playerNumber -> { attempts, points }
 
 const els = {
@@ -15,23 +17,19 @@ const els = {
   loadGroupBtn: document.getElementById("loadGroupBtn"),
   playerRows: document.getElementById("playerRows"),
   activePlayerLabel: document.getElementById("activePlayerLabel"),
+  undoBtn: document.getElementById("undoBtn"),
   btnMissed: document.getElementById("btnMissed"),
   btnV1: document.getElementById("btnV1"),
   btnV2: document.getElementById("btnV2"),
   btnV3: document.getElementById("btnV3"),
   btnHitTarget: document.getElementById("btnHitTarget"),
+  btnMissedTarget: document.getElementById("btnMissedTarget"),
   scoreNum: document.getElementById("scoreNum"),
-  logBtn: document.getElementById("logBtn"),
   toast: document.getElementById("toast"),
 };
 
-const resultButtons = [els.btnMissed, els.btnV1, els.btnV2, els.btnV3];
-const BASE_POINTS = { missed: 0, under30: 1, "30to35": 2, over35: 3 };
-
-function computeScore() {
-  if (!result || result === "missed") return 0;
-  return BASE_POINTS[result] + (hitTarget ? 1 : 0);
-}
+const velocityButtons = [els.btnV1, els.btnV2, els.btnV3];
+const targetButtons = [els.btnHitTarget, els.btnMissedTarget];
 
 function activePlayer() {
   return activeIndex === null ? null : visiblePlayers[activeIndex];
@@ -61,8 +59,7 @@ function renderRows() {
 
 function selectPlayer(idx) {
   activeIndex = idx;
-  result = null;
-  hitTarget = false;
+  pendingResult = null;
   renderRows();
   refreshUI();
 }
@@ -73,16 +70,17 @@ function refreshUI() {
     ? `#${p.playerNumber} ${p.playerName || "(unnamed)"}`
     : (visiblePlayers.length ? "Tap a player" : "Load a group");
 
-  resultButtons.forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.result === result);
+  velocityButtons.forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.result === pendingResult);
   });
 
-  const madeIt = result && result !== "missed";
-  els.btnHitTarget.disabled = !madeIt;
-  els.btnHitTarget.classList.toggle("active", madeIt && hitTarget);
+  els.scoreNum.textContent = pendingResult ? String(BASE_POINTS[pendingResult]) : "–";
 
-  els.scoreNum.textContent = computeScore();
-  els.logBtn.disabled = !p || !result || !isScriptConfigured();
+  const ready = !!p && !isSubmitting && isScriptConfigured();
+  els.btnMissed.disabled = !ready;
+  velocityButtons.forEach((btn) => { btn.disabled = !ready; });
+  targetButtons.forEach((btn) => { btn.disabled = !ready || !pendingResult; });
+  els.undoBtn.disabled = !lastLogged || isSubmitting || !isScriptConfigured();
 }
 
 function setToast(message, isError) {
@@ -104,8 +102,7 @@ function loadGroup() {
     .sort((a, b) => Number(a.playerNumber) - Number(b.playerNumber));
 
   activeIndex = visiblePlayers.length ? 0 : null;
-  result = null;
-  hitTarget = false;
+  pendingResult = null;
   renderRows();
   refreshUI();
 
@@ -150,22 +147,32 @@ els.startNumberInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") loadGroup();
 });
 
-resultButtons.forEach((btn) => {
+els.btnMissed.addEventListener("click", () => {
+  if (els.btnMissed.disabled) return;
+  submitAttempt("missed", false);
+});
+
+velocityButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
-    if (!activePlayer()) return;
-    result = result === btn.dataset.result ? null : btn.dataset.result;
-    if (!result || result === "missed") hitTarget = false;
+    if (btn.disabled) return;
+    pendingResult = pendingResult === btn.dataset.result ? null : btn.dataset.result;
     refreshUI();
   });
 });
 
 els.btnHitTarget.addEventListener("click", () => {
   if (els.btnHitTarget.disabled) return;
-  hitTarget = !hitTarget;
-  refreshUI();
+  submitAttempt(pendingResult, true);
 });
 
-els.logBtn.addEventListener("click", async () => {
+els.btnMissedTarget.addEventListener("click", () => {
+  if (els.btnMissedTarget.disabled) return;
+  submitAttempt(pendingResult, false);
+});
+
+els.undoBtn.addEventListener("click", performUndo);
+
+async function submitAttempt(result, hitTarget) {
   const p = activePlayer();
   if (!p || !result) return;
   const coach = els.coachSelect.value;
@@ -174,37 +181,76 @@ els.logBtn.addEventListener("click", async () => {
     return;
   }
 
-  const payload = {
-    coach,
-    playerNumber: p.playerNumber,
-    playerName: p.playerName,
-    skill: SKILL,
-    result,
-    hitTarget,
-  };
-
-  els.logBtn.disabled = true;
+  isSubmitting = true;
+  refreshUI();
   try {
-    const response = await postAttempt(payload);
-    const pts = response.points ?? computeScore();
+    const response = await postAttempt({
+      coach,
+      playerNumber: p.playerNumber,
+      playerName: p.playerName,
+      skill: SKILL,
+      result,
+      hitTarget,
+    });
+    const pts = response.points;
 
     const prev = sessionTallies[p.playerNumber] || { attempts: 0, points: 0 };
     sessionTallies[p.playerNumber] = { attempts: prev.attempts + 1, points: prev.points + pts };
 
-    setToast(`✓ Logged: #${p.playerNumber} ${p.playerName} — ${pts} pts`, false);
+    lastLogged = {
+      rowNumber: response.rowNumber,
+      coach,
+      playerNumber: p.playerNumber,
+      playerName: p.playerName,
+      points: pts,
+    };
+
+    setToast(`✓ #${p.playerNumber} ${p.playerName} — ${pts} pts`, false);
 
     // Players serve in numerical order, so move on to the next one automatically.
     if (visiblePlayers.length) {
       activeIndex = (activeIndex + 1) % visiblePlayers.length;
     }
-    result = null;
-    hitTarget = false;
+    pendingResult = null;
     renderRows();
-    refreshUI();
   } catch (err) {
     setToast(`Failed to log attempt: ${err.message}`, true);
+  } finally {
+    isSubmitting = false;
     refreshUI();
   }
-});
+}
+
+async function performUndo() {
+  if (!lastLogged) return;
+  const undone = lastLogged;
+
+  isSubmitting = true;
+  refreshUI();
+  try {
+    await postUndo({ coach: undone.coach, rowNumber: undone.rowNumber });
+
+    const prev = sessionTallies[undone.playerNumber];
+    if (prev) {
+      const attempts = prev.attempts - 1;
+      if (attempts <= 0) delete sessionTallies[undone.playerNumber];
+      else sessionTallies[undone.playerNumber] = { attempts, points: prev.points - undone.points };
+    }
+
+    // Jump back to the player whose attempt was undone so it can be redone.
+    const idx = visiblePlayers.findIndex((p) => String(p.playerNumber) === String(undone.playerNumber));
+    if (idx !== -1) activeIndex = idx;
+    pendingResult = null;
+    lastLogged = null;
+
+    setToast(`↩ Undid #${undone.playerNumber} ${undone.playerName} — ${undone.points} pts`, false);
+    renderRows();
+  } catch (err) {
+    setToast(`Couldn't undo: ${err.message}`, true);
+  } finally {
+    isSubmitting = false;
+    refreshUI();
+  }
+}
 
 init();

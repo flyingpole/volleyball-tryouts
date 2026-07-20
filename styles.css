@@ -372,7 +372,7 @@ select {
   display: flex;
   gap: 6px;
   align-items: center;
-  padding: 10px 12px 0;
+  padding: 6px 12px 0;
 }
 
 .quick-controls select {
@@ -405,29 +405,29 @@ select {
 
 .serving-app .toast {
   margin: 0 12px;
-  padding: 6px;
-  min-height: 1em;
-  font-size: 0.8rem;
+  padding: 3px;
+  min-height: 0.9em;
+  font-size: 0.75rem;
 }
 
 .evaluator-grid {
   display: grid !important;
   grid-template-columns: 1fr 84px;
-  gap: 8px;
+  gap: 6px;
   align-items: start;
-  padding: 8px 12px 12px !important;
+  padding: 4px 12px 6px !important;
   flex: 1;
 }
 
 .rows-col {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
   min-width: 0;
 }
 
 .rows-col .row-btn {
-  padding: 9px 10px;
+  padding: 7px 10px;
   font-size: 0.82rem;
   border-radius: 8px;
 }
@@ -446,15 +446,15 @@ select {
 .score-rail {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
 }
 
 .active-player-mini {
-  font-size: 0.68rem;
+  font-size: 0.62rem;
   font-weight: 700;
   text-align: center;
-  line-height: 1.2;
-  min-height: 2.2em;
+  line-height: 1.1;
+  min-height: 1.4em;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -462,7 +462,7 @@ select {
 
 .score-mini {
   text-align: center;
-  font-size: 1.5rem;
+  font-size: 1rem;
   font-weight: 800;
   color: var(--navy);
   line-height: 1;
@@ -470,8 +470,8 @@ select {
 
 .rail-btn {
   width: 100%;
-  min-height: 44px;
-  padding: 6px 4px;
+  min-height: 38px;
+  padding: 4px 4px;
   font-size: 0.75rem;
   line-height: 1.1;
   border-radius: 8px;
@@ -481,16 +481,20 @@ select {
   font-size: 0.6rem;
 }
 
-.rail-log {
-  background: var(--orange);
-  color: white;
-  border: none;
+.rail-undo {
+  min-height: 26px;
+  padding: 4px;
+  font-size: 0.65rem;
   font-weight: 800;
+  border: 1px solid var(--red);
+  background: white;
+  color: var(--red);
   cursor: pointer;
 }
 
-.rail-log:disabled {
-  background: var(--gray-light);
+.rail-undo:disabled {
+  border-color: var(--gray-light);
+  background: white;
   color: var(--gray);
   cursor: not-allowed;
 }
