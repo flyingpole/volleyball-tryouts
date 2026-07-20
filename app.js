@@ -10,12 +10,40 @@ function isScriptConfigured() {
   );
 }
 
+// Wrapped in try/catch: private-browsing modes can throw on localStorage
+// access instead of just no-opping, which would otherwise take the whole
+// page down.
 function getSavedCoach() {
-  return localStorage.getItem(COACH_KEY) || "";
+  try {
+    return localStorage.getItem(COACH_KEY) || "";
+  } catch (err) {
+    return "";
+  }
 }
 
 function saveCoach(name) {
-  localStorage.setItem(COACH_KEY, name.trim());
+  try {
+    localStorage.setItem(COACH_KEY, name.trim());
+  } catch (err) {
+    // Ignore — nothing to persist to.
+  }
+}
+
+function loadJSON(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch (err) {
+    return fallback;
+  }
+}
+
+function saveJSON(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (err) {
+    // Ignore — nothing to persist to.
+  }
 }
 
 async function fetchRoster() {

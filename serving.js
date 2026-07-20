@@ -1,6 +1,7 @@
 const SKILL = "Serving";
 const GROUP_SIZE = 10;
 const BASE_POINTS = { under30: 1, "30to35": 2, over35: 3 };
+const STATE_KEY = "vbtryouts_serving_state";
 
 let roster = [];
 let visiblePlayers = []; // up to 10 roster entries in the loaded number range, ascending
@@ -8,7 +9,15 @@ let activeIndex = null; // index into visiblePlayers
 let pendingResult = null; // "under30" | "30to35" | "over35" | null — set by a velocity tap, cleared on submit
 let isSubmitting = false; // guards against double-taps while a request is in flight
 let lastLogged = null; // { rowNumber, coach, playerNumber, playerName, points } — one level of undo
-const sessionTallies = {}; // playerNumber -> { attempts, points }
+let sessionTallies = {}; // playerNumber -> { attempts, points }, persisted so a refresh doesn't lose progress
+
+function persistState() {
+  saveJSON(STATE_KEY, {
+    startNumber: els.startNumberInput.value,
+    activePlayerNumber: activePlayer() ? activePlayer().playerNumber : undefined,
+    tallies: sessionTallies,
+  });
+}
 
 const els = {
   banner: document.getElementById("configBanner"),
@@ -62,6 +71,7 @@ function selectPlayer(idx) {
   pendingResult = null;
   renderRows();
   refreshUI();
+  persistState();
 }
 
 function refreshUI() {
@@ -88,7 +98,10 @@ function setToast(message, isError) {
   els.toast.className = "toast " + (isError ? "error" : "success");
 }
 
-function loadGroup() {
+// preferredPlayerNumber: used only when restoring a saved session, so the
+// previously-active player stays selected instead of resetting to the first
+// player in the group.
+function loadGroup(preferredPlayerNumber) {
   const start = parseInt(els.startNumberInput.value, 10);
   if (!Number.isFinite(start)) {
     setToast("Enter a starting player number.", true);
@@ -101,10 +114,16 @@ function loadGroup() {
     })
     .sort((a, b) => Number(a.playerNumber) - Number(b.playerNumber));
 
-  activeIndex = visiblePlayers.length ? 0 : null;
+  let idx = 0;
+  if (preferredPlayerNumber !== undefined) {
+    const found = visiblePlayers.findIndex((p) => String(p.playerNumber) === String(preferredPlayerNumber));
+    if (found !== -1) idx = found;
+  }
+  activeIndex = visiblePlayers.length ? idx : null;
   pendingResult = null;
   renderRows();
   refreshUI();
+  persistState();
 
   if (!visiblePlayers.length) {
     setToast(`No roster players found from #${start} to #${start + GROUP_SIZE - 1}.`, true);
@@ -128,10 +147,17 @@ async function init() {
       opt.textContent = name;
       els.coachSelect.appendChild(opt);
     });
-    const saved = getSavedCoach();
-    if (saved && coaches.includes(saved)) els.coachSelect.value = saved;
+    const savedCoach = getSavedCoach();
+    if (savedCoach && coaches.includes(savedCoach)) els.coachSelect.value = savedCoach;
 
     roster = players;
+
+    const savedState = loadJSON(STATE_KEY, null);
+    if (savedState && savedState.tallies) sessionTallies = savedState.tallies;
+    if (savedState && savedState.startNumber) {
+      els.startNumberInput.value = savedState.startNumber;
+      loadGroup(savedState.activePlayerNumber);
+    }
   } catch (err) {
     setToast(`Couldn't load setup data: ${err.message}`, true);
   }
@@ -213,6 +239,7 @@ async function submitAttempt(result, hitTarget) {
     }
     pendingResult = null;
     renderRows();
+    persistState();
   } catch (err) {
     setToast(`Failed to log attempt: ${err.message}`, true);
   } finally {
@@ -245,6 +272,7 @@ async function performUndo() {
 
     setToast(`↩ Undid #${undone.playerNumber} ${undone.playerName} — ${undone.points} pts`, false);
     renderRows();
+    persistState();
   } catch (err) {
     setToast(`Couldn't undo: ${err.message}`, true);
   } finally {
