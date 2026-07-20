@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Serving — Volleyball Tryouts</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <h1>Serving Evaluation</h1>
+    <p><a class="back-link" href="index.html" style="color:#c3d0e0;">&larr; Skills</a></p>
+  </header>
+
+  <div id="configBanner" class="banner" hidden>
+    ⚠ Not connected to the Google Sheet yet. Deploy the Apps Script Web App
+    and paste its URL into <code>config.js</code> — see README.md.
+  </div>
+
+  <main>
+    <div class="field">
+      <label for="coachName">Coach</label>
+      <div class="coach-row">
+        <input type="text" id="coachName" placeholder="Your name" />
+        <button type="button" id="saveCoachBtn">Save</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="playerInput">Player</label>
+      <input type="text" id="playerInput" list="playerList" placeholder="Search # or name" autocomplete="off" />
+      <datalist id="playerList"></datalist>
+      <div class="player-info" id="playerInfo"></div>
+    </div>
+
+    <div class="field">
+      <label>Result</label>
+      <div class="btn-group cols-2" style="grid-template-columns:1fr 1fr;">
+        <button type="button" class="toggle" id="btnIn">IN<span class="pts">+1 pt</span></button>
+        <button type="button" class="toggle" id="btnSpot" disabled>HIT SPOT<span class="pts">+1 pt</span></button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Velocity (only if In)</label>
+      <div class="btn-group cols-3">
+        <button type="button" class="toggle velocity" id="btnV1" data-tier="under30" disabled>&lt;30 mph<span class="pts">+1 pt</span></button>
+        <button type="button" class="toggle velocity" id="btnV2" data-tier="30to35" disabled>30-35 mph<span class="pts">+2 pt</span></button>
+        <button type="button" class="toggle velocity" id="btnV3" data-tier="over35" disabled>&gt;35 mph<span class="pts">+3 pt</span></button>
+      </div>
+    </div>
+
+    <div class="score-preview">
+      <div class="num" id="scoreNum">0</div>
+      <div class="label">Points this attempt</div>
+    </div>
+
+    <button type="button" class="log-btn" id="logBtn" disabled>Log Attempt</button>
+
+    <div class="toast" id="toast"></div>
+
+    <div class="session-log">
+      <strong>This session</strong>
+      <ul id="sessionList"></ul>
+    </div>
+  </main>
+</div>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+<script src="serving.js"></script>
+</body>
+</html>

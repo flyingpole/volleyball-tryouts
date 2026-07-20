@@ -1,0 +1,38 @@
+// Shared helpers used across skill pages.
+
+const COACH_KEY = "vbtryouts_coach";
+
+function isScriptConfigured() {
+  return (
+    typeof CONFIG !== "undefined" &&
+    CONFIG.SCRIPT_URL &&
+    !CONFIG.SCRIPT_URL.startsWith("PASTE_")
+  );
+}
+
+function getSavedCoach() {
+  return localStorage.getItem(COACH_KEY) || "";
+}
+
+function saveCoach(name) {
+  localStorage.setItem(COACH_KEY, name.trim());
+}
+
+async function fetchRoster() {
+  const res = await fetch(`${CONFIG.SCRIPT_URL}?action=roster`);
+  if (!res.ok) throw new Error(`Roster fetch failed (${res.status})`);
+  const data = await res.json();
+  return data.players || [];
+}
+
+// Apps Script Web Apps don't send CORS headers for JSON content types,
+// so we POST as text/plain (the default) to avoid a preflight request.
+// doPost() on the server reads e.postData.contents and JSON.parses it.
+async function postAttempt(payload) {
+  const res = await fetch(CONFIG.SCRIPT_URL, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Submit failed (${res.status})`);
+  return res.json();
+}

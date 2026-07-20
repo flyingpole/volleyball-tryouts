@@ -1,0 +1,284 @@
+:root {
+  --navy: #0b2545;
+  --navy-dark: #071a33;
+  --orange: #ff6b35;
+  --green: #1fa774;
+  --green-dark: #157a55;
+  --gray: #6b7785;
+  --gray-light: #e7ebef;
+  --red: #d64545;
+  --bg: #f4f6f8;
+  --card: #ffffff;
+  --text: #16202a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.app {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100vh;
+  background: var(--card);
+  display: flex;
+  flex-direction: column;
+}
+
+header.top {
+  background: var(--navy);
+  color: white;
+  padding: 20px 20px 16px;
+}
+
+header.top h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+header.top p {
+  margin: 4px 0 0;
+  color: #c3d0e0;
+  font-size: 0.85rem;
+}
+
+.banner {
+  background: #fff3e0;
+  color: #8a4b00;
+  padding: 10px 16px;
+  font-size: 0.85rem;
+  border-bottom: 1px solid #f0c98a;
+}
+
+main {
+  flex: 1;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.skill-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.skill-link {
+  display: block;
+  padding: 20px;
+  border-radius: 14px;
+  background: var(--navy);
+  color: white;
+  text-decoration: none;
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.skill-link.disabled {
+  background: var(--gray-light);
+  color: var(--gray);
+  pointer-events: none;
+}
+
+.skill-link .sub {
+  display: block;
+  font-weight: 400;
+  font-size: 0.8rem;
+  margin-top: 4px;
+  opacity: 0.85;
+}
+
+label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--gray);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+input[type="text"] {
+  font-size: 1rem;
+  padding: 14px;
+  border-radius: 10px;
+  border: 1px solid #cdd6df;
+  background: var(--bg);
+}
+
+input[type="text"]:focus {
+  outline: 2px solid var(--navy);
+}
+
+.player-info {
+  font-size: 0.85rem;
+  color: var(--gray);
+  min-height: 1.2em;
+}
+
+.btn-group {
+  display: grid;
+  gap: 10px;
+}
+
+.btn-group.cols-3 {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+button.toggle {
+  font-size: 1.05rem;
+  font-weight: 700;
+  padding: 20px 10px;
+  border-radius: 12px;
+  border: 2px solid var(--gray-light);
+  background: white;
+  color: var(--text);
+  cursor: pointer;
+  min-height: 64px;
+}
+
+button.toggle .pts {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--gray);
+  margin-top: 2px;
+}
+
+button.toggle.active {
+  border-color: var(--green);
+  background: var(--green);
+  color: white;
+}
+
+button.toggle.active .pts {
+  color: #dff5ec;
+}
+
+button.toggle:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+button.velocity.active {
+  border-color: var(--orange);
+  background: var(--orange);
+}
+
+button.velocity.active .pts {
+  color: #ffe6da;
+}
+
+.score-preview {
+  text-align: center;
+  padding: 18px;
+  background: var(--navy);
+  border-radius: 14px;
+  color: white;
+}
+
+.score-preview .num {
+  font-size: 2.6rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.score-preview .label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #c3d0e0;
+}
+
+.log-btn {
+  font-size: 1.15rem;
+  font-weight: 700;
+  padding: 20px;
+  border-radius: 14px;
+  border: none;
+  background: var(--orange);
+  color: white;
+  cursor: pointer;
+}
+
+.log-btn:disabled {
+  background: var(--gray-light);
+  color: var(--gray);
+  cursor: not-allowed;
+}
+
+.toast {
+  padding: 14px;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  text-align: center;
+  min-height: 1.2em;
+}
+
+.toast.success {
+  background: #e3f6ee;
+  color: var(--green-dark);
+}
+
+.toast.error {
+  background: #fbe7e7;
+  color: var(--red);
+}
+
+.session-log {
+  font-size: 0.8rem;
+  color: var(--gray);
+  border-top: 1px solid var(--gray-light);
+  padding-top: 10px;
+}
+
+.session-log ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.session-log li {
+  padding: 4px 0;
+  border-bottom: 1px dashed var(--gray-light);
+}
+
+.back-link {
+  font-size: 0.85rem;
+  color: var(--navy);
+  text-decoration: none;
+}
+
+.coach-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.coach-row input {
+  flex: 1;
+}
+
+.coach-row button {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid #cdd6df;
+  background: white;
+  font-weight: 600;
+  cursor: pointer;
+}
