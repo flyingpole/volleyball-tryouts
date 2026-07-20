@@ -2,9 +2,8 @@ const SKILL = "Serving";
 
 let roster = [];
 let selectedPlayer = null; // { playerNumber, playerName }
-let inZone = false;
-let hitSpot = false;
-let velocityTier = null; // "under30" | "30to35" | "over35" | null
+let result = null; // "missed" | "under30" | "30to35" | "over35" | null
+let hitTarget = false;
 const sessionLog = [];
 
 const els = {
@@ -14,47 +13,41 @@ const els = {
   playerInput: document.getElementById("playerInput"),
   playerList: document.getElementById("playerList"),
   playerInfo: document.getElementById("playerInfo"),
-  btnIn: document.getElementById("btnIn"),
-  btnSpot: document.getElementById("btnSpot"),
+  btnMissed: document.getElementById("btnMissed"),
   btnV1: document.getElementById("btnV1"),
   btnV2: document.getElementById("btnV2"),
   btnV3: document.getElementById("btnV3"),
+  btnHitTarget: document.getElementById("btnHitTarget"),
   scoreNum: document.getElementById("scoreNum"),
   logBtn: document.getElementById("logBtn"),
   toast: document.getElementById("toast"),
   sessionList: document.getElementById("sessionList"),
 };
 
-const velocityButtons = [els.btnV1, els.btnV2, els.btnV3];
+const resultButtons = [els.btnMissed, els.btnV1, els.btnV2, els.btnV3];
+const BASE_POINTS = { missed: 0, under30: 1, "30to35": 2, over35: 3 };
 
 function computeScore() {
-  if (!inZone) return 0;
-  let score = 1;
-  if (hitSpot) score += 1;
-  if (velocityTier === "under30") score += 1;
-  else if (velocityTier === "30to35") score += 2;
-  else if (velocityTier === "over35") score += 3;
-  return score;
+  if (!result || result === "missed") return 0;
+  return BASE_POINTS[result] + (hitTarget ? 1 : 0);
 }
 
 function refreshUI() {
-  els.btnIn.classList.toggle("active", inZone);
-  els.btnSpot.classList.toggle("active", hitSpot);
-  els.btnSpot.disabled = !inZone;
-
-  velocityButtons.forEach((btn) => {
-    btn.disabled = !inZone;
-    btn.classList.toggle("active", inZone && btn.dataset.tier === velocityTier);
+  resultButtons.forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.result === result);
   });
 
+  const madeIt = result && result !== "missed";
+  els.btnHitTarget.disabled = !madeIt;
+  els.btnHitTarget.classList.toggle("active", madeIt && hitTarget);
+
   els.scoreNum.textContent = computeScore();
-  els.logBtn.disabled = !selectedPlayer || !isScriptConfigured();
+  els.logBtn.disabled = !selectedPlayer || !result || !isScriptConfigured();
 }
 
 function resetAttempt() {
-  inZone = false;
-  hitSpot = false;
-  velocityTier = null;
+  result = null;
+  hitTarget = false;
   refreshUI();
 }
 
@@ -106,36 +99,27 @@ els.playerInput.addEventListener("input", () => {
   const p = findPlayerFromInputValue(els.playerInput.value);
   selectedPlayer = p;
   els.playerInfo.textContent = p
-    ? `Positions: ${(p.positions || []).join(", ") || "—"}`
+    ? `Grade ${p.grade || "—"} · Positions: ${p.positions || "—"}`
     : "";
   refreshUI();
 });
 
-els.btnIn.addEventListener("click", () => {
-  inZone = !inZone;
-  if (!inZone) {
-    hitSpot = false;
-    velocityTier = null;
-  }
-  refreshUI();
-});
-
-els.btnSpot.addEventListener("click", () => {
-  if (!inZone) return;
-  hitSpot = !hitSpot;
-  refreshUI();
-});
-
-velocityButtons.forEach((btn) => {
+resultButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
-    if (!inZone) return;
-    velocityTier = velocityTier === btn.dataset.tier ? null : btn.dataset.tier;
+    result = result === btn.dataset.result ? null : btn.dataset.result;
+    if (!result || result === "missed") hitTarget = false;
     refreshUI();
   });
 });
 
+els.btnHitTarget.addEventListener("click", () => {
+  if (els.btnHitTarget.disabled) return;
+  hitTarget = !hitTarget;
+  refreshUI();
+});
+
 els.logBtn.addEventListener("click", async () => {
-  if (!selectedPlayer) return;
+  if (!selectedPlayer || !result) return;
   const coach = els.coachName.value.trim();
   if (!coach) {
     setToast("Enter your coach name first.", true);
@@ -146,16 +130,16 @@ els.logBtn.addEventListener("click", async () => {
   const payload = {
     coach,
     playerNumber: selectedPlayer.playerNumber,
+    playerName: selectedPlayer.playerName,
     skill: SKILL,
-    inZone,
-    hitSpot,
-    velocityTier,
+    result,
+    hitTarget,
   };
 
   els.logBtn.disabled = true;
   try {
-    const result = await postAttempt(payload);
-    const pts = result.points ?? computeScore();
+    const response = await postAttempt(payload);
+    const pts = response.points ?? computeScore();
     setToast(`✓ Logged: #${selectedPlayer.playerNumber} ${selectedPlayer.playerName} — ${pts} pts`, false);
     sessionLog.unshift({ ...selectedPlayer, points: pts, time: new Date().toLocaleTimeString() });
     renderSessionLog();
@@ -163,7 +147,7 @@ els.logBtn.addEventListener("click", async () => {
   } catch (err) {
     setToast(`Failed to log attempt: ${err.message}`, true);
   } finally {
-    els.logBtn.disabled = !selectedPlayer || !isScriptConfigured();
+    els.logBtn.disabled = !selectedPlayer || !result || !isScriptConfigured();
   }
 });
 

@@ -11,24 +11,41 @@ const SHEETS = {
 };
 const RESERVED_SHEETS = Object.values(SHEETS);
 
-const POSITIONS = ["OH", "OPP", "MB", "S", "D"];
+// Skill columns on Master / each coach tab, in sheet order (columns E-I).
+// Add an entry here (and a matching *Rankings sheet) when a new skill's
+// scoring UI ships — Master/coach tab formulas pick it up automatically.
+const SKILLS = [
+  { name: "Serving", col: "E" },
+  { name: "Passing", col: "F" },
+  { name: "Attacking Pin", col: "G" },
+  { name: "Attacking MB", col: "H" },
+  { name: "Blocking", col: "I" },
+];
+
+// Dropdown choices for the position filter on ranking sheets. Positions is a
+// free-text field on Roster (e.g. "OH, MB"), so this list is just for the
+// filter UI — edit it (or the data validation on each Rankings sheet) if
+// your team uses different position codes.
+const POSITION_FILTER_OPTIONS = ["OH", "OPP", "MB", "S", "D"];
+
 const ROSTER_MAX_ROWS = 250; // headroom for players; raise if a tryout group is bigger
 
-// "Needs more looks" thresholds for the rankings tab — tune freely.
+// "Needs more looks" thresholds for the rankings tabs — tune freely.
 const FLAG_MIN_ATTEMPTS = 3;
 const FLAG_MIN_COACHES = 2;
 const FLAG_SCORE_GAP = 0.3;
 
 // ---------------------------------------------------------------------------
 // One-time setup. Run this manually from the Apps Script editor after pasting
-// this file in. Safe to re-run (it rebuilds the computed tabs from scratch).
+// this file in. Safe to re-run (it rebuilds the computed tabs from scratch —
+// Roster and any coach tabs are left alone).
 // ---------------------------------------------------------------------------
 function setupSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   setupRosterSheet(ss);
   setupLogSheet(ss);
   buildAggregateSheet(getOrCreateSheet(ss, SHEETS.MASTER), null);
-  buildServingRankingsSheet(getOrCreateSheet(ss, SHEETS.SERVING_RANKINGS));
+  buildSkillRankingsSheet(getOrCreateSheet(ss, SHEETS.SERVING_RANKINGS), "Serving", "E");
 }
 
 function getOrCreateSheet(ss, name) {
@@ -37,18 +54,17 @@ function getOrCreateSheet(ss, name) {
 
 function setupRosterSheet(ss) {
   const sheet = getOrCreateSheet(ss, SHEETS.ROSTER);
-  const headers = ["Player #", "Player Name", "OH", "OPP", "MB", "S", "D"];
+  if (sheet.getRange(1, 1).getValue() !== "") return; // don't clobber existing roster data
+  const headers = ["Player #", "Name", "Positions", "Grade"];
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold");
   sheet.setFrozenRows(1);
-  const checkboxRange = sheet.getRange(2, 3, ROSTER_MAX_ROWS, POSITIONS.length);
-  checkboxRange.insertCheckboxes();
 }
 
 function setupLogSheet(ss) {
   const sheet = getOrCreateSheet(ss, SHEETS.LOG);
   const headers = [
     "Timestamp", "Coach", "Player #", "Player Name", "Skill",
-    "In Zone", "Hit Spot", "Velocity Tier", "Points",
+    "Result", "Hit Target", "Points",
   ];
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold");
   sheet.setFrozenRows(1);
@@ -58,68 +74,76 @@ function setupLogSheet(ss) {
 // null (aggregates every coach), or a single coach's tab when coachFilter is
 // that coach's name. Every cell is a plain formula tied to a specific row, so
 // the sheet stays live as the Log tab grows — no script recompute needed.
+// Columns: Player #, Name, Positions, Grade, then one avg-score column per
+// skill in SKILLS.
 function buildAggregateSheet(sheet, coachFilter) {
   sheet.clear();
-  const headers = coachFilter
-    ? ["Player #", "Player Name", "Positions", "Serving Avg", "Serving Attempts"]
-    : ["Player #", "Player Name", "Positions", "Serving Avg", "Serving Attempts", "Coaches Evaluated"];
+  const headers = ["Player #", "Name", "Positions", "Grade"].concat(SKILLS.map((s) => s.name));
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold");
   sheet.setFrozenRows(1);
 
   const startRow = 2;
-  const colA = [], colB = [], colC = [], colD = [], colE = [], colF = [];
   const coachCriteria = coachFilter
     ? `,Log!$B:$B,"${coachFilter.replace(/"/g, '""')}"`
     : "";
 
+  const baseCols = [[], [], [], []]; // Player #, Name, Positions, Grade
+  const skillCols = SKILLS.map(() => []);
+
   for (let i = 0; i < ROSTER_MAX_ROWS; i++) {
     const r = startRow + i;
-    colA.push([`=IF(Roster!A${r}="","",Roster!A${r})`]);
-    colB.push([`=IF(Roster!A${r}="","",Roster!B${r})`]);
-    colC.push([`=IF(Roster!A${r}="","",TRIM(IF(Roster!C${r},"OH ","")&IF(Roster!D${r},"OPP ","")&IF(Roster!E${r},"MB ","")&IF(Roster!F${r},"S ","")&IF(Roster!G${r},"D ","")))`]);
-    colD.push([`=IF($A${r}="","",IFERROR(AVERAGEIFS(Log!$I:$I,Log!$C:$C,$A${r},Log!$E:$E,"Serving"${coachCriteria}),""))`]);
-    colE.push([`=IF($A${r}="","",COUNTIFS(Log!$C:$C,$A${r},Log!$E:$E,"Serving"${coachCriteria}))`]);
-    if (!coachFilter) {
-      colF.push([`=IF($A${r}="","",IFERROR(COUNTA(UNIQUE(FILTER(Log!$B:$B,Log!$C:$C=$A${r},Log!$E:$E="Serving"))),0))`]);
-    }
+    baseCols[0].push([`=IF(Roster!A${r}="","",Roster!A${r})`]);
+    baseCols[1].push([`=IF(Roster!A${r}="","",Roster!B${r})`]);
+    baseCols[2].push([`=IF(Roster!A${r}="","",Roster!C${r})`]);
+    baseCols[3].push([`=IF(Roster!A${r}="","",Roster!D${r})`]);
+    SKILLS.forEach((skill, idx) => {
+      skillCols[idx].push([`=IF($A${r}="","",IFERROR(AVERAGEIFS(Log!$H:$H,Log!$C:$C,$A${r},Log!$E:$E,"${skill.name}"${coachCriteria}),""))`]);
+    });
   }
 
-  sheet.getRange(startRow, 1, ROSTER_MAX_ROWS, 1).setFormulas(colA);
-  sheet.getRange(startRow, 2, ROSTER_MAX_ROWS, 1).setFormulas(colB);
-  sheet.getRange(startRow, 3, ROSTER_MAX_ROWS, 1).setFormulas(colC);
-  sheet.getRange(startRow, 4, ROSTER_MAX_ROWS, 1).setFormulas(colD);
-  sheet.getRange(startRow, 5, ROSTER_MAX_ROWS, 1).setFormulas(colE);
-  if (!coachFilter) {
-    sheet.getRange(startRow, 6, ROSTER_MAX_ROWS, 1).setFormulas(colF);
-  }
+  baseCols.forEach((col, idx) => {
+    sheet.getRange(startRow, idx + 1, ROSTER_MAX_ROWS, 1).setFormulas(col);
+  });
+  skillCols.forEach((col, idx) => {
+    sheet.getRange(startRow, 5 + idx, ROSTER_MAX_ROWS, 1).setFormulas(col);
+  });
 }
 
-function buildServingRankingsSheet(sheet) {
+// Builds a ranking/triage sheet for one skill: sorted by that skill's avg
+// score (optionally filtered by position), with attempt/coach counts and a
+// "needs more looks" flag. Call this again with a new skill name + Master
+// column letter (see SKILLS) when a new skill's evaluation UI ships.
+function buildSkillRankingsSheet(sheet, skillName, masterColLetter) {
   sheet.clear();
   sheet.getRange("A1").setValue("Position filter:").setFontWeight("bold");
   sheet.getRange("B1").setValue("All");
   const rule = SpreadsheetApp.newDataValidation()
-    .requireValueInList(["All"].concat(POSITIONS), true)
+    .requireValueInList(["All"].concat(POSITION_FILTER_OPTIONS), true)
     .build();
   sheet.getRange("B1").setDataValidation(rule);
 
-  const headers = ["Rank", "Player #", "Player Name", "Positions", "Serving Avg", "Attempts", "Coaches", "Flag"];
+  const headers = ["Rank", "Player #", "Name", "Positions", "Grade", `${skillName} Avg`, "Attempts", "Coaches", "Flag"];
   sheet.getRange(3, 1, 1, headers.length).setValues([headers]).setFontWeight("bold");
   sheet.setFrozenRows(3);
 
   const lastRow = 1 + ROSTER_MAX_ROWS;
+  const select = `A,B,C,D,${masterColLetter}`;
   sheet.getRange("B4").setFormula(
-    `=IFERROR(QUERY(Master!$A$2:$F$${lastRow}, IF($B$1="All", "select A,B,C,D,E,F where A is not null order by D desc", "select A,B,C,D,E,F where A is not null and C contains '"&$B$1&"' order by D desc"), 0), "")`
+    `=IFERROR(QUERY(Master!$A$2:$I$${lastRow}, IF($B$1="All", "select ${select} where A is not null order by ${masterColLetter} desc", "select ${select} where A is not null and C contains '"&$B$1&"' order by ${masterColLetter} desc"), 0), "")`
   );
 
-  const colA = [], colH = [];
+  const colA = [], colG = [], colH = [], colI = [];
   for (let i = 0; i < ROSTER_MAX_ROWS; i++) {
     const r = 4 + i;
     colA.push([`=IF(B${r}="","",ROW()-3)`]);
-    colH.push([`=IF(B${r}="","",IFERROR(IF(OR(F${r}<${FLAG_MIN_ATTEMPTS},G${r}<${FLAG_MIN_COACHES},ABS(E${r}-E${r + 1})<${FLAG_SCORE_GAP}),"⚠ Needs more looks",""),""))`]);
+    colG.push([`=IF(B${r}="","",COUNTIFS(Log!$C:$C,B${r},Log!$E:$E,"${skillName}"))`]);
+    colH.push([`=IF(B${r}="","",IFERROR(COUNTA(UNIQUE(FILTER(Log!$B:$B,Log!$C:$C=B${r},Log!$E:$E="${skillName}"))),0))`]);
+    colI.push([`=IF(B${r}="","",IFERROR(IF(OR(G${r}<${FLAG_MIN_ATTEMPTS},H${r}<${FLAG_MIN_COACHES},ABS(F${r}-F${r + 1})<${FLAG_SCORE_GAP}),"⚠ Needs more looks",""),""))`]);
   }
   sheet.getRange(4, 1, ROSTER_MAX_ROWS, 1).setFormulas(colA);
+  sheet.getRange(4, 7, ROSTER_MAX_ROWS, 1).setFormulas(colG);
   sheet.getRange(4, 8, ROSTER_MAX_ROWS, 1).setFormulas(colH);
+  sheet.getRange(4, 9, ROSTER_MAX_ROWS, 1).setFormulas(colI);
 }
 
 // ---------------------------------------------------------------------------
@@ -139,24 +163,23 @@ function doPost(e) {
     const coach = String(body.coach || "").trim();
     const skill = String(body.skill || "").trim();
     const playerNumber = String(body.playerNumber || "").trim();
-    if (!coach || !skill || !playerNumber) {
-      throw new Error("Missing coach, skill, or playerNumber");
+    const result = String(body.result || "").trim(); // "missed" | "under30" | "30to35" | "over35"
+    if (!coach || !skill || !playerNumber || !result) {
+      throw new Error("Missing coach, skill, playerNumber, or result");
     }
     if (RESERVED_SHEETS.indexOf(coach) !== -1) {
       throw new Error(`Coach name "${coach}" conflicts with a reserved sheet name`);
     }
 
-    const inZone = !!body.inZone;
-    const hitSpot = !!body.hitSpot;
-    const velocityTier = body.velocityTier || "";
-    const points = computeServingScore(inZone, hitSpot, velocityTier);
+    const hitTarget = !!body.hitTarget;
+    const points = computeServingScore(result, hitTarget);
 
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const playerName = ensureRosterRow(ss, playerNumber, body.playerName || "");
 
     ss.getSheetByName(SHEETS.LOG).appendRow([
       new Date(), coach, playerNumber, playerName, skill,
-      inZone, hitSpot, velocityTier, points,
+      result, hitTarget, points,
     ]);
 
     ensureCoachSheet(ss, coach);
@@ -167,13 +190,16 @@ function doPost(e) {
   }
 }
 
-function computeServingScore(inZone, hitSpot, velocityTier) {
-  if (!inZone) return 0;
-  let score = 1;
-  if (hitSpot) score += 1;
-  if (velocityTier === "under30") score += 1;
-  else if (velocityTier === "30to35") score += 2;
-  else if (velocityTier === "over35") score += 3;
+// Missed: 0 points (still logged as an attempt for stats).
+// Otherwise: velocity tier sets the base score, +1 more if the target was hit.
+function computeServingScore(result, hitTarget) {
+  if (result === "missed") return 0;
+  let score;
+  if (result === "under30") score = 1;
+  else if (result === "30to35") score = 2;
+  else if (result === "over35") score = 3;
+  else throw new Error(`Unknown result "${result}"`);
+  if (hitTarget) score += 1;
   return score;
 }
 
@@ -206,13 +232,11 @@ function ensureRosterRow(ss, playerNumber, fallbackName) {
 
 function readRoster(ss) {
   const sheet = ss.getSheetByName(SHEETS.ROSTER);
-  const values = sheet.getRange(2, 1, ROSTER_MAX_ROWS, 2 + POSITIONS.length).getValues();
+  const values = sheet.getRange(2, 1, ROSTER_MAX_ROWS, 4).getValues();
   const players = [];
-  values.forEach((row) => {
-    const [playerNumber, playerName, ...flags] = row;
+  values.forEach(([playerNumber, playerName, positions, grade]) => {
     if (playerNumber === "" || playerNumber === null) return;
-    const positions = POSITIONS.filter((_, idx) => flags[idx] === true);
-    players.push({ playerNumber, playerName, positions });
+    players.push({ playerNumber, playerName, positions: positions || "", grade: grade || "" });
   });
   return players;
 }

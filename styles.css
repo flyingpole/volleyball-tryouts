@@ -134,6 +134,10 @@ input[type="text"]:focus {
   gap: 10px;
 }
 
+.btn-group.cols-2 {
+  grid-template-columns: 1fr 1fr;
+}
+
 .btn-group.cols-3 {
   grid-template-columns: 1fr 1fr 1fr;
 }

@@ -36,19 +36,17 @@
 
     <div class="field">
       <label>Result</label>
-      <div class="btn-group cols-2" style="grid-template-columns:1fr 1fr;">
-        <button type="button" class="toggle" id="btnIn">IN<span class="pts">+1 pt</span></button>
-        <button type="button" class="toggle" id="btnSpot" disabled>HIT SPOT<span class="pts">+1 pt</span></button>
+      <div class="btn-group cols-2">
+        <button type="button" class="toggle result" id="btnMissed" data-result="missed">MISSED<span class="pts">0 pts</span></button>
+        <button type="button" class="toggle result velocity" id="btnV1" data-result="under30">&lt;30 mph<span class="pts">1 pt</span></button>
+        <button type="button" class="toggle result velocity" id="btnV2" data-result="30to35">30-35 mph<span class="pts">2 pt</span></button>
+        <button type="button" class="toggle result velocity" id="btnV3" data-result="over35">&gt;35 mph<span class="pts">3 pt</span></button>
       </div>
     </div>
 
     <div class="field">
-      <label>Velocity (only if In)</label>
-      <div class="btn-group cols-3">
-        <button type="button" class="toggle velocity" id="btnV1" data-tier="under30" disabled>&lt;30 mph<span class="pts">+1 pt</span></button>
-        <button type="button" class="toggle velocity" id="btnV2" data-tier="30to35" disabled>30-35 mph<span class="pts">+2 pt</span></button>
-        <button type="button" class="toggle velocity" id="btnV3" data-tier="over35" disabled>&gt;35 mph<span class="pts">+3 pt</span></button>
-      </div>
+      <label>Bonus (only if made)</label>
+      <button type="button" class="toggle" id="btnHitTarget" disabled>HIT TARGET<span class="pts">+1 pt</span></button>
     </div>
 
     <div class="score-preview">
