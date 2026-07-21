@@ -412,7 +412,7 @@ select {
 
 .evaluator-grid {
   display: grid !important;
-  grid-template-columns: 1fr 84px;
+  grid-template-columns: 1fr 160px;
   gap: 6px;
   align-items: start;
   padding: 4px 12px 6px !important;
@@ -471,8 +471,8 @@ select {
 .rail-btn {
   width: 100%;
   min-height: 38px;
-  padding: 4px 4px;
-  font-size: 0.75rem;
+  padding: 4px 6px;
+  font-size: 0.85rem;
   line-height: 1.1;
   border-radius: 8px;
 }
