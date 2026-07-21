@@ -414,9 +414,16 @@ select {
   display: grid !important;
   grid-template-columns: 1fr 160px;
   gap: 6px;
-  align-items: start;
+  align-items: stretch;
   padding: 4px 12px 6px !important;
   flex: 1;
+}
+
+.col-players {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
 }
 
 .rows-col {
@@ -441,6 +448,59 @@ select {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.player-jog-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--gray);
+  text-align: center;
+  margin: 6px 0 2px;
+}
+
+.player-jog-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 90px;
+}
+
+.player-jog {
+  position: absolute;
+  inset: 0;
+  overflow-y: scroll;
+  scroll-snap-type: y mandatory;
+  border: 2px solid var(--gray-light);
+  border-radius: 10px;
+  background: var(--bg);
+}
+
+.player-jog-item {
+  height: 36px;
+  line-height: 36px;
+  padding: 0 8px;
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text);
+  scroll-snap-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-jog-highlight {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  top: 50%;
+  height: 36px;
+  margin-top: -18px;
+  border-top: 2px solid var(--orange);
+  border-bottom: 2px solid var(--orange);
+  border-radius: 4px;
+  pointer-events: none;
 }
 
 .score-rail {

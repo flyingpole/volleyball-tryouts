@@ -1,6 +1,7 @@
 const SKILL = "Serving";
 const GROUP_SIZE = 10;
 const MAX_UNDO = 5;
+const JOG_ITEM_HEIGHT = 36;
 const BASE_POINTS = { Slow: 1, Average: 2, Fast: 3 };
 const STATE_KEY = "vbtryouts_serving_state";
 
@@ -10,6 +11,7 @@ let activeIndex = null; // index into visiblePlayers
 let pendingResult = null; // "Slow" | "Average" | "Fast" | null — set by a velocity tap, cleared on submit
 let sessionTallies = {}; // playerNumber -> { attempts, points }
 let undoStack = []; // most-recent-first, confirmed (server-acknowledged) attempts only, capped at MAX_UNDO
+let jogSettleTimer = null;
 
 function computeScore(result, hitTarget) {
   if (result === "Missed") return 0;
@@ -31,6 +33,7 @@ const els = {
   startNumberInput: document.getElementById("startNumberInput"),
   loadGroupBtn: document.getElementById("loadGroupBtn"),
   playerRows: document.getElementById("playerRows"),
+  playerJog: document.getElementById("playerJog"),
   activePlayerLabel: document.getElementById("activePlayerLabel"),
   undoBtn: document.getElementById("undoBtn"),
   btnMissed: document.getElementById("btnMissed"),
@@ -140,6 +143,61 @@ function loadGroup(preferredPlayerNumber) {
   }
 }
 
+// Full-roster scrub list for finding a player who's out of the loaded
+// group's numeric range. Scroll-snap does the "jog wheel" feel natively;
+// whichever item settles under the center highlight becomes the new focus.
+function renderPlayerJog() {
+  const jog = els.playerJog;
+  jog.innerHTML = "";
+
+  const spacer = () => {
+    const div = document.createElement("div");
+    div.style.height = `${JOG_ITEM_HEIGHT}px`;
+    return div;
+  };
+  jog.appendChild(spacer());
+
+  [...roster]
+    .sort((a, b) => Number(a.playerNumber) - Number(b.playerNumber))
+    .forEach((p) => {
+      const item = document.createElement("div");
+      item.className = "player-jog-item";
+      item.textContent = `#${p.playerNumber} ${p.playerName || ""}`;
+      item.dataset.playerNumber = p.playerNumber;
+      jog.appendChild(item);
+    });
+
+  jog.appendChild(spacer());
+}
+
+els.playerJog.addEventListener("scroll", () => {
+  clearTimeout(jogSettleTimer);
+  jogSettleTimer = setTimeout(onJogSettled, 120);
+});
+
+function onJogSettled() {
+  const jog = els.playerJog;
+  const centerY = jog.scrollTop + jog.clientHeight / 2;
+  let closest = null;
+  let closestDist = Infinity;
+  jog.querySelectorAll(".player-jog-item").forEach((item) => {
+    const itemCenter = item.offsetTop + item.offsetHeight / 2;
+    const dist = Math.abs(itemCenter - centerY);
+    if (dist < closestDist) {
+      closestDist = dist;
+      closest = item;
+    }
+  });
+  if (closest) jumpToPlayer(Number(closest.dataset.playerNumber));
+}
+
+// Re-centers the main 10-player group so the found player lands near the
+// middle, with players above/below shown by their normal numeric sequence.
+function jumpToPlayer(playerNumber) {
+  els.startNumberInput.value = String(playerNumber - 4);
+  loadGroup(playerNumber);
+}
+
 async function init() {
   if (!isScriptConfigured()) {
     els.banner.hidden = false;
@@ -159,6 +217,7 @@ async function init() {
     if (savedCoach && coaches.includes(savedCoach)) els.coachSelect.value = savedCoach;
 
     roster = players;
+    renderPlayerJog();
 
     const savedState = loadJSON(STATE_KEY, null);
     if (savedState && savedState.tallies) sessionTallies = savedState.tallies;
