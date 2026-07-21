@@ -414,7 +414,7 @@ select {
   display: grid !important;
   grid-template-columns: 1fr 160px;
   gap: 6px;
-  align-items: stretch;
+  align-items: start;
   padding: 4px 12px 6px !important;
   flex: 1;
 }
@@ -423,7 +423,6 @@ select {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  min-height: 0;
 }
 
 .rows-col {
@@ -462,8 +461,8 @@ select {
 
 .player-jog-wrap {
   position: relative;
-  flex: 1;
-  min-height: 90px;
+  height: 112px; /* fixed, not flex-computed — some mobile browsers weren't
+                    resolving flex:1 through the grid/flex chain above this */
 }
 
 .player-jog {
