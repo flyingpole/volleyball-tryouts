@@ -90,6 +90,10 @@ function setupLogSheet(ss) {
 // avg-score column per skill in SKILLS.
 function buildAggregateSheet(sheet, coachFilter) {
   sheet.clear();
+  // This is a computed, read-only view — any data validation left over on it
+  // (e.g. copied from Roster's Positions dropdown) would reject formula
+  // results that don't happen to match that list, like "" for a blank row.
+  sheet.getRange(1, 1, ROSTER_MAX_ROWS + 5, 12).clearDataValidations();
   const headers = ["Player #", "Name", "Positions", "Grade"].concat(SKILLS.map((s) => s.name));
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold");
   sheet.setFrozenRows(1);
@@ -127,6 +131,9 @@ function buildAggregateSheet(sheet, coachFilter) {
 // Sheet column letter (see SKILLS) when a new skill's evaluation UI ships.
 function buildSkillRankingsSheet(sheet, skillName, summaryColLetter) {
   sheet.clear();
+  // Same reasoning as buildAggregateSheet — clear any leftover validation
+  // before adding back the one dropdown this sheet actually needs (B1).
+  sheet.getRange(1, 1, ROSTER_MAX_ROWS + 5, 12).clearDataValidations();
   sheet.getRange("A1").setValue("Position filter:").setFontWeight("bold");
   sheet.getRange("B1").setValue("All");
   const rule = SpreadsheetApp.newDataValidation()
