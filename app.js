@@ -63,14 +63,44 @@ async function fetchCoaches() {
 // Apps Script Web Apps don't send CORS headers for JSON content types,
 // so we POST as text/plain (the default) to avoid a preflight request.
 // doPost() on the server reads e.postData.contents and JSON.parses it.
+//
+// Errors are marked .confirmed = true only when the SERVER explicitly told us
+// it rejected the request (a clean JSON response with success:false) — that
+// means nothing was written, safe to treat as a real failure. Apps Script Web
+// Apps are known to sometimes fail the client-side fetch (redirect/CORS
+// quirks) even though doPost ran to completion and wrote the row, so a
+// network-level error (.confirmed = false) must NOT be treated the same way:
+// the caller shouldn't assume the write didn't happen.
 async function postJSON(payload) {
-  const res = await fetch(CONFIG.SCRIPT_URL, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) throw new Error(`Request failed (${res.status})`);
-  const data = await res.json();
-  if (!data.success) throw new Error(data.error || "Request failed");
+  let res;
+  try {
+    res = await fetch(CONFIG.SCRIPT_URL, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    const wrapped = new Error(`Network error: ${err.message}`);
+    wrapped.confirmed = false;
+    throw wrapped;
+  }
+  if (!res.ok) {
+    const err = new Error(`Request failed (${res.status})`);
+    err.confirmed = false;
+    throw err;
+  }
+  let data;
+  try {
+    data = await res.json();
+  } catch (err) {
+    const wrapped = new Error(`Couldn't read response: ${err.message}`);
+    wrapped.confirmed = false;
+    throw wrapped;
+  }
+  if (!data.success) {
+    const err = new Error(data.error || "Request failed");
+    err.confirmed = true;
+    throw err;
+  }
   return data;
 }
 

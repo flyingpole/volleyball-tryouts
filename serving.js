@@ -352,9 +352,18 @@ function submitAttempt(result, hitTarget) {
       persistState();
     })
     .catch((err) => {
-      adjustTally(p.playerNumber, -1, -pts);
-      renderRows();
-      setToast(`⚠ #${p.playerNumber} ${p.playerName} failed to save: ${err.message}`, true);
+      if (err.confirmed) {
+        // The server explicitly rejected it — nothing was written, safe to roll back.
+        adjustTally(p.playerNumber, -1, -pts);
+        renderRows();
+        setToast(`⚠ #${p.playerNumber} ${p.playerName} failed to save: ${err.message}`, true);
+      } else {
+        // Couldn't confirm either way (network/CORS hiccup) — Apps Script may
+        // well have written the row despite the request looking like it
+        // failed here. Leave the tally as-is rather than risk a double-submit
+        // from re-scoring something that actually saved.
+        setToast(`⚠ #${p.playerNumber} ${p.playerName}: couldn't confirm save (${err.message}). Check the Log sheet before re-scoring.`, true);
+      }
       persistState();
     });
 }
@@ -377,12 +386,19 @@ function performUndo() {
       setToast(`↩ Undid #${undone.playerNumber} ${undone.playerName} — ${undone.points} pts`, false);
     })
     .catch((err) => {
-      // Server rejected it — put it back and restore the tally.
-      undoStack.unshift(undone);
-      adjustTally(undone.playerNumber, 1, undone.points);
-      renderRows();
-      refreshUI();
-      setToast(`Couldn't undo: ${err.message}`, true);
+      if (err.confirmed) {
+        // Server explicitly rejected the undo — it definitely didn't happen,
+        // safe to put the entry back and restore the tally.
+        undoStack.unshift(undone);
+        adjustTally(undone.playerNumber, 1, undone.points);
+        renderRows();
+        refreshUI();
+        setToast(`Couldn't undo: ${err.message}`, true);
+      } else {
+        // Couldn't confirm either way — it may have gone through despite the
+        // request looking failed here, so don't restore it optimistically.
+        setToast(`Couldn't confirm undo (${err.message}). Check the Log sheet.`, true);
+      }
       persistState();
     });
 }
