@@ -1,5 +1,6 @@
 const SKILL = "Serving";
 const GROUP_SIZE = 10;
+const MAX_UNDO = 5;
 const BASE_POINTS = { under30: 1, "30to35": 2, over35: 3 };
 const STATE_KEY = "vbtryouts_serving_state";
 
@@ -7,15 +8,20 @@ let roster = [];
 let visiblePlayers = []; // up to 10 roster entries in the loaded number range, ascending
 let activeIndex = null; // index into visiblePlayers
 let pendingResult = null; // "under30" | "30to35" | "over35" | null — set by a velocity tap, cleared on submit
-let isSubmitting = false; // guards against double-taps while a request is in flight
-let lastLogged = null; // { rowNumber, coach, playerNumber, playerName, points } — one level of undo
-let sessionTallies = {}; // playerNumber -> { attempts, points }, persisted so a refresh doesn't lose progress
+let sessionTallies = {}; // playerNumber -> { attempts, points }
+let undoStack = []; // most-recent-first, confirmed (server-acknowledged) attempts only, capped at MAX_UNDO
+
+function computeScore(result, hitTarget) {
+  if (result === "missed") return 0;
+  return BASE_POINTS[result] + (hitTarget ? 1 : 0);
+}
 
 function persistState() {
   saveJSON(STATE_KEY, {
     startNumber: els.startNumberInput.value,
     activePlayerNumber: activePlayer() ? activePlayer().playerNumber : undefined,
     tallies: sessionTallies,
+    undoStack,
   });
 }
 
@@ -86,11 +92,13 @@ function refreshUI() {
 
   els.scoreNum.textContent = pendingResult ? String(BASE_POINTS[pendingResult]) : "–";
 
-  const ready = !!p && !isSubmitting && isScriptConfigured();
+  const ready = !!p && isScriptConfigured();
   els.btnMissed.disabled = !ready;
   velocityButtons.forEach((btn) => { btn.disabled = !ready; });
   targetButtons.forEach((btn) => { btn.disabled = !ready || !pendingResult; });
-  els.undoBtn.disabled = !lastLogged || isSubmitting || !isScriptConfigured();
+
+  els.undoBtn.disabled = !undoStack.length || !isScriptConfigured();
+  els.undoBtn.textContent = undoStack.length ? `UNDO (${undoStack.length})` : "UNDO";
 }
 
 function setToast(message, isError) {
@@ -154,6 +162,7 @@ async function init() {
 
     const savedState = loadJSON(STATE_KEY, null);
     if (savedState && savedState.tallies) sessionTallies = savedState.tallies;
+    if (savedState && Array.isArray(savedState.undoStack)) undoStack = savedState.undoStack;
     if (savedState && savedState.startNumber) {
       els.startNumberInput.value = savedState.startNumber;
       loadGroup(savedState.activePlayerNumber);
@@ -168,7 +177,7 @@ els.coachSelect.addEventListener("change", () => {
   saveCoach(els.coachSelect.value);
 });
 
-els.loadGroupBtn.addEventListener("click", loadGroup);
+els.loadGroupBtn.addEventListener("click", () => loadGroup());
 els.startNumberInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") loadGroup();
 });
@@ -198,7 +207,26 @@ els.btnMissedTarget.addEventListener("click", () => {
 
 els.undoBtn.addEventListener("click", performUndo);
 
-async function submitAttempt(result, hitTarget) {
+function adjustTally(playerNumber, attemptsDelta, pointsDelta) {
+  const prev = sessionTallies[playerNumber] || { attempts: 0, points: 0 };
+  const attempts = prev.attempts + attemptsDelta;
+  if (attempts <= 0) {
+    delete sessionTallies[playerNumber];
+  } else {
+    sessionTallies[playerNumber] = { attempts, points: prev.points + pointsDelta };
+  }
+}
+
+function pushUndoEntry(entry) {
+  undoStack.unshift(entry);
+  if (undoStack.length > MAX_UNDO) undoStack.length = MAX_UNDO;
+}
+
+// Updates state and the screen immediately, then confirms with the server in
+// the background — Apps Script round-trips can take a couple of seconds, and
+// waiting on that before advancing made rapid-fire scoring feel sluggish.
+// Rolls back if the request ultimately fails.
+function submitAttempt(result, hitTarget) {
   const p = activePlayer();
   if (!p || !result) return;
   const coach = els.coachSelect.value;
@@ -207,78 +235,63 @@ async function submitAttempt(result, hitTarget) {
     return;
   }
 
-  isSubmitting = true;
+  const pts = computeScore(result, hitTarget);
+
+  adjustTally(p.playerNumber, 1, pts);
+  if (visiblePlayers.length) activeIndex = (activeIndex + 1) % visiblePlayers.length;
+  pendingResult = null;
+  renderRows();
   refreshUI();
-  try {
-    const response = await postAttempt({
-      coach,
-      playerNumber: p.playerNumber,
-      playerName: p.playerName,
-      skill: SKILL,
-      result,
-      hitTarget,
+  setToast(`✓ #${p.playerNumber} ${p.playerName} — ${pts} pts (saving…)`, false);
+  persistState();
+
+  postAttempt({ coach, playerNumber: p.playerNumber, playerName: p.playerName, skill: SKILL, result, hitTarget })
+    .then((response) => {
+      pushUndoEntry({
+        rowNumber: response.rowNumber,
+        coach,
+        playerNumber: p.playerNumber,
+        playerName: p.playerName,
+        points: response.points ?? pts,
+      });
+      setToast(`✓ #${p.playerNumber} ${p.playerName} — ${response.points ?? pts} pts`, false);
+      refreshUI();
+      persistState();
+    })
+    .catch((err) => {
+      adjustTally(p.playerNumber, -1, -pts);
+      renderRows();
+      setToast(`⚠ #${p.playerNumber} ${p.playerName} failed to save: ${err.message}`, true);
+      persistState();
     });
-    const pts = response.points;
-
-    const prev = sessionTallies[p.playerNumber] || { attempts: 0, points: 0 };
-    sessionTallies[p.playerNumber] = { attempts: prev.attempts + 1, points: prev.points + pts };
-
-    lastLogged = {
-      rowNumber: response.rowNumber,
-      coach,
-      playerNumber: p.playerNumber,
-      playerName: p.playerName,
-      points: pts,
-    };
-
-    setToast(`✓ #${p.playerNumber} ${p.playerName} — ${pts} pts`, false);
-
-    // Players serve in numerical order, so move on to the next one automatically.
-    if (visiblePlayers.length) {
-      activeIndex = (activeIndex + 1) % visiblePlayers.length;
-    }
-    pendingResult = null;
-    renderRows();
-    persistState();
-  } catch (err) {
-    setToast(`Failed to log attempt: ${err.message}`, true);
-  } finally {
-    isSubmitting = false;
-    refreshUI();
-  }
 }
 
-async function performUndo() {
-  if (!lastLogged) return;
-  const undone = lastLogged;
+function performUndo() {
+  if (!undoStack.length) return;
+  const undone = undoStack.shift();
 
-  isSubmitting = true;
+  adjustTally(undone.playerNumber, -1, -undone.points);
+  const idx = visiblePlayers.findIndex((p) => String(p.playerNumber) === String(undone.playerNumber));
+  if (idx !== -1) activeIndex = idx;
+  pendingResult = null;
+  renderRows();
   refreshUI();
-  try {
-    await postUndo({ coach: undone.coach, rowNumber: undone.rowNumber });
+  setToast(`↩ Undoing #${undone.playerNumber} ${undone.playerName}…`, false);
+  persistState();
 
-    const prev = sessionTallies[undone.playerNumber];
-    if (prev) {
-      const attempts = prev.attempts - 1;
-      if (attempts <= 0) delete sessionTallies[undone.playerNumber];
-      else sessionTallies[undone.playerNumber] = { attempts, points: prev.points - undone.points };
-    }
-
-    // Jump back to the player whose attempt was undone so it can be redone.
-    const idx = visiblePlayers.findIndex((p) => String(p.playerNumber) === String(undone.playerNumber));
-    if (idx !== -1) activeIndex = idx;
-    pendingResult = null;
-    lastLogged = null;
-
-    setToast(`↩ Undid #${undone.playerNumber} ${undone.playerName} — ${undone.points} pts`, false);
-    renderRows();
-    persistState();
-  } catch (err) {
-    setToast(`Couldn't undo: ${err.message}`, true);
-  } finally {
-    isSubmitting = false;
-    refreshUI();
-  }
+  postUndo({ coach: undone.coach, rowNumber: undone.rowNumber })
+    .then(() => {
+      setToast(`↩ Undid #${undone.playerNumber} ${undone.playerName} — ${undone.points} pts`, false);
+    })
+    .catch((err) => {
+      // Server rejected it — put it back and restore the tally.
+      undoStack.unshift(undone);
+      adjustTally(undone.playerNumber, 1, undone.points);
+      renderRows();
+      refreshUI();
+      setToast(`Couldn't undo: ${err.message}`, true);
+      persistState();
+    });
 }
 
 init();

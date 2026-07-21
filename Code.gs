@@ -76,7 +76,7 @@ function setupLogSheet(ss) {
   const sheet = getOrCreateSheet(ss, SHEETS.LOG);
   const headers = [
     "Timestamp", "Coach", "Player #", "Player Name", "Skill",
-    "Result", "Hit Target", "Points",
+    "Result", "Hit Target", "Points", "Deleted",
   ];
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold");
   sheet.setFrozenRows(1);
@@ -109,7 +109,7 @@ function buildAggregateSheet(sheet, coachFilter) {
     baseCols[2].push([`=IF(Roster!A${r}="","",Roster!C${r})`]);
     baseCols[3].push([`=IF(Roster!A${r}="","",Roster!D${r})`]);
     SKILLS.forEach((skill, idx) => {
-      skillCols[idx].push([`=IF($A${r}="","",IFERROR(AVERAGEIFS(Log!$H:$H,Log!$C:$C,$A${r},Log!$E:$E,"${skill.name}"${coachCriteria}),""))`]);
+      skillCols[idx].push([`=IF($A${r}="","",IFERROR(AVERAGEIFS(Log!$H:$H,Log!$C:$C,$A${r},Log!$E:$E,"${skill.name}",Log!$I:$I,"<>TRUE"${coachCriteria}),""))`]);
     });
   }
 
@@ -148,8 +148,8 @@ function buildSkillRankingsSheet(sheet, skillName, summaryColLetter) {
   for (let i = 0; i < ROSTER_MAX_ROWS; i++) {
     const r = 4 + i;
     colA.push([`=IF(B${r}="","",ROW()-3)`]);
-    colG.push([`=IF(B${r}="","",COUNTIFS(Log!$C:$C,B${r},Log!$E:$E,"${skillName}"))`]);
-    colH.push([`=IF(B${r}="","",IFERROR(COUNTA(UNIQUE(FILTER(Log!$B:$B,Log!$C:$C=B${r},Log!$E:$E="${skillName}"))),0))`]);
+    colG.push([`=IF(B${r}="","",COUNTIFS(Log!$C:$C,B${r},Log!$E:$E,"${skillName}",Log!$I:$I,"<>TRUE"))`]);
+    colH.push([`=IF(B${r}="","",IFERROR(COUNTA(UNIQUE(FILTER(Log!$B:$B,Log!$C:$C=B${r},Log!$E:$E="${skillName}",Log!$I:$I<>true))),0))`]);
     colI.push([`=IF(B${r}="","",IFERROR(IF(OR(G${r}<${FLAG_MIN_ATTEMPTS},H${r}<${FLAG_MIN_COACHES},ABS(F${r}-F${r + 1})<${FLAG_SCORE_GAP}),"⚠ Needs more looks",""),""))`]);
   }
   sheet.getRange(4, 1, ROSTER_MAX_ROWS, 1).setFormulas(colA);
@@ -205,7 +205,7 @@ function handleLogAttempt(ss, body) {
     const logSheet = ss.getSheetByName(SHEETS.LOG);
     logSheet.appendRow([
       new Date(), coach, playerNumber, playerName, skill,
-      result, hitTarget, points,
+      result, hitTarget, points, false,
     ]);
     rowNumber = logSheet.getLastRow();
   } finally {
@@ -224,10 +224,13 @@ function handleLogAttempt(ss, body) {
   return jsonResponse({ success: true, points, rowNumber });
 }
 
-// Deletes one Log row by its exact row number, only if it still belongs to
-// the requesting coach (guards against a race where row numbers shifted).
-// Summary Sheet / coach tabs / Rankings all recompute automatically since
-// they're live formulas over Log.
+// Marks one Log row as Deleted by its exact row number, only if it still
+// belongs to the requesting coach and hasn't already been undone. This is a
+// soft delete (flag a column, never shift rows) on purpose: coaches submit
+// concurrently, and an actual deleteRow() would shift every row below it,
+// silently invalidating any row numbers other in-flight requests are holding
+// onto for their own undo. Summary Sheet / coach tabs / Rankings formulas all
+// exclude Deleted=TRUE rows, so this recomputes automatically.
 function handleUndo(ss, body) {
   const coach = String(body.coach || "").trim();
   const rowNumber = parseInt(body.rowNumber, 10);
@@ -242,12 +245,15 @@ function handleUndo(ss, body) {
     if (rowNumber > logSheet.getLastRow()) {
       throw new Error("That attempt is no longer there to undo");
     }
-    const row = logSheet.getRange(rowNumber, 1, 1, 8).getValues()[0];
-    const [, rowCoach, playerNumber, playerName, , , , points] = row;
+    const row = logSheet.getRange(rowNumber, 1, 1, 9).getValues()[0];
+    const [, rowCoach, playerNumber, playerName, , , , points, deleted] = row;
     if (String(rowCoach) !== coach) {
       throw new Error("That attempt no longer matches — can't undo");
     }
-    logSheet.deleteRow(rowNumber);
+    if (deleted === true) {
+      throw new Error("That attempt was already undone");
+    }
+    logSheet.getRange(rowNumber, 9).setValue(true);
     return jsonResponse({ success: true, playerNumber, playerName, points });
   } finally {
     lock.releaseLock();
