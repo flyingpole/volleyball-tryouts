@@ -184,7 +184,7 @@ function handleLogAttempt(ss, body) {
   const coach = String(body.coach || "").trim();
   const skill = String(body.skill || "").trim();
   const playerNumber = String(body.playerNumber || "").trim();
-  const result = String(body.result || "").trim(); // "missed" | "under30" | "30to35" | "over35"
+  const result = String(body.result || "").trim(); // "Missed" | "Slow" | "Average" | "Fast"
   if (!coach || !skill || !playerNumber || !result) {
     throw new Error("Missing coach, skill, playerNumber, or result");
   }
@@ -261,13 +261,14 @@ function handleUndo(ss, body) {
 }
 
 // Missed: 0 points (still logged as an attempt for stats).
-// Otherwise: velocity tier sets the base score, +1 more if the target was hit.
+// Otherwise: velocity tier (Slow <30mph, Average 30-35mph, Fast >35mph) sets
+// the base score, +1 more if the target was hit.
 function computeServingScore(result, hitTarget) {
-  if (result === "missed") return 0;
+  if (result === "Missed") return 0;
   let score;
-  if (result === "under30") score = 1;
-  else if (result === "30to35") score = 2;
-  else if (result === "over35") score = 3;
+  if (result === "Slow") score = 1;
+  else if (result === "Average") score = 2;
+  else if (result === "Fast") score = 3;
   else throw new Error(`Unknown result "${result}"`);
   if (hitTarget) score += 1;
   return score;

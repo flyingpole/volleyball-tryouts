@@ -27,10 +27,12 @@ serve in numerical order; tap a different row any time to override, e.g. a
 player skipped this rotation):
 
 - **Missed** — logs instantly, 0 points (still counted as an attempt).
-- Tap a velocity (**&lt;30 / 30-35 / &gt;35 mph**) to select it — this doesn't
-  log yet, since target still needs a decision.
-- Tap **Target ✓** or **Target ✗** to log that attempt: base points for the
-  velocity (1/2/3) plus +1 if the target was hit.
+- Tap a velocity — **Slow** (&lt;30 mph, 1pt), **Average** (30-35 mph, 2pt), or
+  **Fast** (&gt;35 mph, 3pt) — to select it. This doesn't log yet, since target
+  still needs a decision.
+- Tap **Target ✓** or **Target ✗** to log that attempt: the velocity's base
+  points plus +1 if the target was hit. The Log sheet's Result column records
+  "Slow"/"Average"/"Fast"/"Missed", not raw mph ranges.
 
 Max 4 points per attempt. Scores are computed server-side in `Code.gs` (the
 web app never trusts a client-sent score). The screen updates immediately on

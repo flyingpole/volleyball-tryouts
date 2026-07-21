@@ -1,18 +1,18 @@
 const SKILL = "Serving";
 const GROUP_SIZE = 10;
 const MAX_UNDO = 5;
-const BASE_POINTS = { under30: 1, "30to35": 2, over35: 3 };
+const BASE_POINTS = { Slow: 1, Average: 2, Fast: 3 };
 const STATE_KEY = "vbtryouts_serving_state";
 
 let roster = [];
 let visiblePlayers = []; // up to 10 roster entries in the loaded number range, ascending
 let activeIndex = null; // index into visiblePlayers
-let pendingResult = null; // "under30" | "30to35" | "over35" | null — set by a velocity tap, cleared on submit
+let pendingResult = null; // "Slow" | "Average" | "Fast" | null — set by a velocity tap, cleared on submit
 let sessionTallies = {}; // playerNumber -> { attempts, points }
 let undoStack = []; // most-recent-first, confirmed (server-acknowledged) attempts only, capped at MAX_UNDO
 
 function computeScore(result, hitTarget) {
-  if (result === "missed") return 0;
+  if (result === "Missed") return 0;
   return BASE_POINTS[result] + (hitTarget ? 1 : 0);
 }
 
@@ -184,7 +184,7 @@ els.startNumberInput.addEventListener("keydown", (e) => {
 
 els.btnMissed.addEventListener("click", () => {
   if (els.btnMissed.disabled) return;
-  submitAttempt("missed", false);
+  submitAttempt("Missed", false);
 });
 
 velocityButtons.forEach((btn) => {
