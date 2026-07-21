@@ -12,6 +12,7 @@ let pendingResult = null; // "Slow" | "Average" | "Fast" | null — set by a vel
 let sessionTallies = {}; // playerNumber -> { attempts, points }
 let undoStack = []; // most-recent-first, confirmed (server-acknowledged) attempts only, capped at MAX_UNDO
 let jogSettleTimer = null;
+let seedStart = null; // the start number a rotation began at; where it loops back to at roster's end
 
 function computeScore(result, hitTarget) {
   if (result === "Missed") return 0;
@@ -24,6 +25,7 @@ function persistState() {
     activePlayerNumber: activePlayer() ? activePlayer().playerNumber : undefined,
     tallies: sessionTallies,
     undoStack,
+    seedStart,
   });
 }
 
@@ -67,7 +69,7 @@ function renderRows() {
     const tally = sessionTallies[p.playerNumber];
     const tallySpan = document.createElement("span");
     tallySpan.className = "tally";
-    tallySpan.textContent = tally ? `${tally.attempts} att · ${tally.points} pts` : "";
+    tallySpan.textContent = tally ? `${tally.attempts} att` : "";
     btn.appendChild(tallySpan);
 
     btn.addEventListener("click", () => selectPlayer(idx));
@@ -109,15 +111,18 @@ function setToast(message, isError) {
   els.toast.className = "toast " + (isError ? "error" : "success");
 }
 
-// preferredPlayerNumber: used only when restoring a saved session, so the
-// previously-active player stays selected instead of resetting to the first
-// player in the group.
-function loadGroup(preferredPlayerNumber) {
+// preferredPlayerNumber: used when restoring a saved session or sliding to a
+// specific player, so that player stays selected instead of defaulting to the
+// first in the group. reseed: true when this is a deliberate new starting
+// point (manual Load, jog wheel) rather than an automatic slide-forward —
+// only deliberate seeds get remembered as the rotation's loop-back point.
+function loadGroup(preferredPlayerNumber, reseed) {
   const start = parseInt(els.startNumberInput.value, 10);
   if (!Number.isFinite(start)) {
     setToast("Enter a starting player number.", true);
     return;
   }
+  if (reseed) seedStart = start;
   visiblePlayers = roster
     .filter((p) => {
       const n = Number(p.playerNumber);
@@ -195,7 +200,33 @@ function onJogSettled() {
 // middle, with players above/below shown by their normal numeric sequence.
 function jumpToPlayer(playerNumber) {
   els.startNumberInput.value = String(playerNumber - 4);
-  loadGroup(playerNumber);
+  loadGroup(playerNumber, true);
+}
+
+// Moves to the next player after a score. Within the visible 10, that's just
+// the next row. At the bottom of the 10, instead of wrapping back to the top
+// of the same group, the whole window slides forward one player number —
+// there's no need to keep re-picking a starting point as you work through
+// the roster. If sliding forward would run past the last player on the
+// roster, loop back to wherever this rotation was originally seeded from.
+function advanceAfterScore() {
+  if (!visiblePlayers.length) return;
+  if (activeIndex < visiblePlayers.length - 1) {
+    activeIndex += 1;
+    return;
+  }
+
+  const lastNum = Number(visiblePlayers[visiblePlayers.length - 1].playerNumber);
+  const hasMoreAhead = roster.some((p) => Number(p.playerNumber) > lastNum);
+
+  if (hasMoreAhead) {
+    const start = parseInt(els.startNumberInput.value, 10);
+    els.startNumberInput.value = String((Number.isFinite(start) ? start : lastNum - GROUP_SIZE + 1) + 1);
+    loadGroup(lastNum + 1);
+  } else if (seedStart !== null) {
+    els.startNumberInput.value = String(seedStart);
+    loadGroup();
+  }
 }
 
 async function init() {
@@ -223,6 +254,9 @@ async function init() {
     if (savedState && savedState.tallies) sessionTallies = savedState.tallies;
     if (savedState && Array.isArray(savedState.undoStack)) undoStack = savedState.undoStack;
     if (savedState && savedState.startNumber) {
+      seedStart = Number.isFinite(savedState.seedStart)
+        ? savedState.seedStart
+        : parseInt(savedState.startNumber, 10);
       els.startNumberInput.value = savedState.startNumber;
       loadGroup(savedState.activePlayerNumber);
     }
@@ -236,9 +270,9 @@ els.coachSelect.addEventListener("change", () => {
   saveCoach(els.coachSelect.value);
 });
 
-els.loadGroupBtn.addEventListener("click", () => loadGroup());
+els.loadGroupBtn.addEventListener("click", () => loadGroup(undefined, true));
 els.startNumberInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") loadGroup();
+  if (e.key === "Enter") loadGroup(undefined, true);
 });
 
 els.btnMissed.addEventListener("click", () => {
@@ -297,7 +331,7 @@ function submitAttempt(result, hitTarget) {
   const pts = computeScore(result, hitTarget);
 
   adjustTally(p.playerNumber, 1, pts);
-  if (visiblePlayers.length) activeIndex = (activeIndex + 1) % visiblePlayers.length;
+  advanceAfterScore();
   pendingResult = null;
   renderRows();
   refreshUI();
