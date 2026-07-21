@@ -281,22 +281,37 @@ function ensureCoachSheet(ss, coach) {
 
 // Returns the player's name, adding a bare roster row first if this player
 // number hasn't been seen yet (e.g. a walk-on not pre-loaded by the admin).
+// Scans the FULL range for an exact match before ever inserting — a roster
+// with any gap (a blank row before a later player's real row) would
+// otherwise make an existing player look "not found yet" at the first blank
+// cell, wrongly trying to insert a duplicate there instead of matching them
+// further down.
 function ensureRosterRow(ss, playerNumber, fallbackName) {
   const sheet = ss.getSheetByName(SHEETS.ROSTER);
-  const numbers = sheet.getRange(2, 1, ROSTER_MAX_ROWS, 1).getValues();
+  const numbers = sheet.getRange(2, 1, ROSTER_MAX_ROWS, 2).getValues();
+  let firstBlankIndex = -1;
   for (let i = 0; i < numbers.length; i++) {
     const cell = numbers[i][0];
     if (String(cell) === playerNumber) {
-      const name = sheet.getRange(2 + i, 2).getValue();
-      return name || fallbackName;
+      return numbers[i][1] || fallbackName;
     }
-    if (cell === "" || cell === null) {
-      sheet.getRange(2 + i, 1, 1, 2).setValues([[playerNumber, fallbackName]]);
-      return fallbackName;
+    if (firstBlankIndex === -1 && (cell === "" || cell === null)) {
+      firstBlankIndex = i;
     }
   }
-  // Roster range is full (more than ROSTER_MAX_ROWS players) — append past it.
-  // Raise ROSTER_MAX_ROWS and re-run setupSheet() if this happens.
+  if (firstBlankIndex !== -1) {
+    try {
+      sheet.getRange(2 + firstBlankIndex, 1, 1, 2).setValues([[playerNumber, fallbackName]]);
+      return fallbackName;
+    } catch (err) {
+      // That row likely has a stale/invalid data-validation conflict (e.g. an
+      // old Positions value that no longer matches the dropdown) — fall
+      // through to appendRow rather than losing this attempt entirely.
+    }
+  }
+  // Roster range is full (more than ROSTER_MAX_ROWS players), or the first
+  // blank row rejected the write — append past it. If this is from a full
+  // range, raise ROSTER_MAX_ROWS and re-run setupSheet().
   sheet.appendRow([playerNumber, fallbackName]);
   return fallbackName;
 }
