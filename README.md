@@ -18,24 +18,29 @@ Sheet you can watch update live during tryouts.
    actually exist on the roster.
 3. Tap a player's row to make them the active player (it highlights). The
    first player in the group is selected automatically after Load.
-4. Use the scoring panel (pinned to the bottom of the screen) for that
-   player's attempt, then **Log Attempt**. The app automatically advances to
-   the *next* player in the group afterward, since players serve in numerical
-   order — tap a different row any time to override (e.g. a player skipped
-   this rotation).
 
 ### Scoring
 
-Each attempt is one button press from **Result**, plus an optional bonus:
+There's no separate "log" step — tapping an outcome logs the attempt
+immediately and auto-advances to the *next* player in the group (players
+serve in numerical order; tap a different row any time to override, e.g. a
+player skipped this rotation):
 
-- **Missed** — 0 points, but still logged as an attempt.
-- **&lt;30 mph** (made it) — 1 point.
-- **30–35 mph** (made it) — 2 points.
-- **&gt;35 mph** (made it) — 3 points.
-- **Hit Target** bonus — +1 point, only selectable if the serve wasn't missed.
+- **Missed** — logs instantly, 0 points (still counted as an attempt).
+- Tap a velocity (**&lt;30 / 30-35 / &gt;35 mph**) to select it — this doesn't
+  log yet, since target still needs a decision.
+- Tap **Target ✓** or **Target ✗** to log that attempt: base points for the
+  velocity (1/2/3) plus +1 if the target was hit.
 
 Max 4 points per attempt. Scores are computed server-side in `Code.gs` (the
-web app never trusts a client-sent score).
+web app never trusts a client-sent score). The screen updates immediately on
+tap and confirms with the Sheet in the background, so a slow Apps Script
+round-trip doesn't block you from moving on to the next player.
+
+**UNDO** (top of the scoring rail) reverts your most recent attempt, and can
+be tapped repeatedly to walk back up to 5 attempts — it survives a page
+reload too. Undoing soft-deletes the Log row (flags it rather than removing
+it) so row numbers never shift under other coaches' concurrent submissions.
 
 ## One-time setup
 
