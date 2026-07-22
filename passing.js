@@ -226,6 +226,7 @@ async function init() {
     });
     const savedCoach = getSavedCoach();
     if (savedCoach && coaches.includes(savedCoach)) els.coachSelect.value = savedCoach;
+    updateHeaderCoach(els.coachSelect.value);
 
     roster = players;
     renderPlayerJog();
@@ -248,7 +249,25 @@ async function init() {
 
 els.coachSelect.addEventListener("change", () => {
   saveCoach(els.coachSelect.value);
+  updateHeaderCoach(els.coachSelect.value);
 });
+
+initHeaderMenu(resetPageState);
+
+// Clears this device's local state only (undo stack, tallies, saved group) —
+// never touches the Google Sheet. See the Reset button in the header menu.
+function resetPageState() {
+  localStorage.removeItem(STATE_KEY);
+  visiblePlayers = [];
+  activeIndex = null;
+  sessionTallies = {};
+  undoStack = [];
+  seedStart = null;
+  els.startNumberInput.value = "";
+  renderRows();
+  refreshUI();
+  setToast("Local data reset for this device.", false);
+}
 
 els.loadGroupBtn.addEventListener("click", () => loadGroup(undefined, true));
 els.startNumberInput.addEventListener("keydown", (e) => {

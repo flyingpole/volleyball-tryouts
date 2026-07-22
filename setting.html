@@ -9,8 +9,18 @@
 <body>
 <div class="app evaluator-app">
   <header class="top compact">
-    <h1>Setting</h1>
-    <a class="back-link" href="index.html" style="color:#c3d0e0;">&larr; Skills</a>
+    <h1>Setting<span class="header-coach" id="headerCoach"></span></h1>
+    <div class="header-actions">
+      <button type="button" class="menu-btn" id="menuBtn" aria-label="Menu" aria-haspopup="true" aria-expanded="false">⋮</button>
+      <a class="back-link" href="index.html" style="color:#c3d0e0;">&larr; Skills</a>
+      <div class="menu-panel" id="menuPanel" hidden>
+        <label class="menu-label" for="coachSelect">Coach</label>
+        <select id="coachSelect" aria-label="Coach">
+          <option value="">Coach…</option>
+        </select>
+        <button type="button" class="menu-reset-btn" id="resetBtn">Reset This Page</button>
+      </div>
+    </div>
   </header>
 
   <div id="configBanner" class="banner" hidden>
@@ -19,9 +29,6 @@
   </div>
 
   <div class="quick-controls">
-    <select id="coachSelect" aria-label="Coach">
-      <option value="">Coach…</option>
-    </select>
     <input type="text" inputmode="numeric" id="startNumberInput" placeholder="Start #" aria-label="Starting player number" />
     <button type="button" id="loadGroupBtn">Load</button>
   </div>

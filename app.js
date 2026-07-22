@@ -10,6 +10,47 @@ function isScriptConfigured() {
   );
 }
 
+// Wires the header's kebab-menu (Coach select + Reset), shared by every
+// skill page. onReset is called only after the user confirms, and only
+// clears THIS device's local state (undo stack, tallies, saved
+// selection) — each page passes its own reset function since local state
+// shape differs per skill. Never touches the Google Sheet.
+function initHeaderMenu(onReset) {
+  const menuBtn = document.getElementById("menuBtn");
+  const menuPanel = document.getElementById("menuPanel");
+  const resetBtn = document.getElementById("resetBtn");
+  if (!menuBtn || !menuPanel) return;
+
+  function closeMenu() {
+    menuPanel.hidden = true;
+    menuBtn.setAttribute("aria-expanded", "false");
+  }
+
+  menuBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    menuPanel.hidden = !menuPanel.hidden;
+    menuBtn.setAttribute("aria-expanded", String(!menuPanel.hidden));
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!menuPanel.hidden && !menuPanel.contains(e.target) && e.target !== menuBtn) closeMenu();
+  });
+
+  if (resetBtn && onReset) {
+    resetBtn.addEventListener("click", () => {
+      if (window.confirm("Reset this page's local data? This clears your undo history and on-screen tallies on THIS device only — it does not affect the Google Sheet.")) {
+        onReset();
+        closeMenu();
+      }
+    });
+  }
+}
+
+function updateHeaderCoach(name) {
+  const el = document.getElementById("headerCoach");
+  if (el) el.textContent = name ? ` — ${name}` : "";
+}
+
 // Wrapped in try/catch: private-browsing modes can throw on localStorage
 // access instead of just no-opping, which would otherwise take the whole
 // page down.

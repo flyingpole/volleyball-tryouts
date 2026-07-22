@@ -9,15 +9,35 @@ during tryouts.
 - **Backend**: a Google Apps Script Web App bound to one Google Sheet — no
   database, no server to run.
 
+## The header menu (every page)
+
+Tap **⋮** next to "← Skills" to open a small panel with two things, shared
+identically across all six skill pages:
+
+- **Coach** — the same dropdown every page used to show inline; picking a
+  name here now shows it right under the page title (e.g. "Serving — Darin")
+  instead of taking up space on the main screen. Remembered on your device
+  after the first pick, same as before.
+- **Reset This Page** — clears *this device's* local data for that one
+  skill page: your undo history, on-screen attempt tallies, and (where
+  applicable) the last-loaded player group or on-court roster. It asks you
+  to confirm first, and it never touches the Google Sheet — only what your
+  phone remembers locally.
+
+Use Reset after testing the app and before a real tryout starts. It's the
+per-device half of resetting for a real session — pair it with clearing
+`Log`'s data rows and updating `Roster` on the Sheet itself (see below).
+Without it, a leftover undo entry from testing could reference a Log row
+number that, after the Sheet is cleared, holds a real tryout attempt instead
+— tapping UNDO would then soft-delete the wrong row.
+
 ## How the Serving page works
 
-1. Pick your name from the **Coach** dropdown (fixed list in `Code.gs` —
-   `COACHES`). Remembered on your device after the first pick.
-2. Type the player number you're starting with (e.g. `11`) and tap **Load**.
+1. Type the player number you're starting with (e.g. `11`) and tap **Load**.
    The app shows every roster player from that number up to 9 higher (e.g.
    11–20) as a stack of rows, in numerical order — however many of those
    actually exist on the roster.
-3. Tap a player's row to make them the active player (it highlights). The
+2. Tap a player's row to make them the active player (it highlights). The
    first player in the group is selected automatically after Load.
 
 ### Scoring
@@ -121,6 +141,12 @@ numeric range, you build an on-court roster by hand:
 4. Tap **REMOVE** to sub the active player off the court entirely. Their
    running total isn't lost — subbing them back in later picks up where
    they left off.
+
+Each column's buttons stretch to fill all available height rather than
+sizing to how many players are on it — so if Side 1 has all 12 and Side 2
+only has 8, Side 2's buttons are proportionally *taller* (easier to tap),
+and both columns still end at the same bottom edge instead of one trailing
+off with blank space.
 
 Coach picker and Undo work the same as every other page. Nine scoring
 buttons, grouped into five play types, each logging immediately:

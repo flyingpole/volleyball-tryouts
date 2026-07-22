@@ -51,7 +51,7 @@ header.top p {
 }
 
 header.top.compact {
-  padding: 10px 16px;
+  padding: 8px 16px 6px;
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -59,6 +59,76 @@ header.top.compact {
 
 header.top.compact h1 {
   font-size: 1.1rem;
+}
+
+.header-coach {
+  display: block;
+  font-size: 0.6rem;
+  font-weight: 400;
+  line-height: 1;
+  color: #c3d0e0;
+}
+
+.header-actions {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.menu-btn {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1.3rem;
+  line-height: 1;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.menu-panel {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 6px;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  padding: 12px;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 30;
+  min-width: 180px;
+}
+
+.menu-panel[hidden] {
+  display: none;
+}
+
+.menu-panel:not([hidden]) {
+  display: flex;
+}
+
+.menu-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--gray);
+}
+
+.menu-panel select {
+  width: 100%;
+}
+
+.menu-reset-btn {
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--red);
+  background: white;
+  color: var(--red);
+  font-weight: 700;
+  cursor: pointer;
 }
 
 .banner {
@@ -604,10 +674,34 @@ select {
   color: #dff5ec;
 }
 
+/* Game Play's on-court columns fill all available height rather than
+   sizing to content, so a side with fewer players (e.g. 8 of 12) gets
+   proportionally TALLER buttons instead of leaving blank space — both
+   sides always fill the same total height. Requires .gp-main (below) to
+   override .evaluator-grid's align-items:start, and flex:1 chained all
+   the way down from .col-players to each individual .court-row. */
+.gp-main {
+  align-items: stretch;
+}
+
+.gp-main .col-players {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .court-columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
+  flex: 1;
+  min-height: 0;
+}
+
+.court-col {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .court-rows {
@@ -615,6 +709,19 @@ select {
   flex-direction: column;
   gap: 3px;
   margin-top: 2px;
+  flex: 1;
+  min-height: 0;
+}
+
+.court-rows-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.62rem;
+  color: var(--gray);
+  border: 2px dashed var(--gray-light);
+  border-radius: 6px;
 }
 
 .court-row {
@@ -630,6 +737,8 @@ select {
   font-size: 0.68rem;
   font-weight: 700;
   cursor: pointer;
+  flex: 1;
+  min-height: 0;
 }
 
 .court-row .tally {

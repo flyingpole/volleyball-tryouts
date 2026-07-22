@@ -68,6 +68,13 @@ function sortAscending(list) {
 
 function renderCourtSide(container, list) {
   container.innerHTML = "";
+  if (!list.length) {
+    const empty = document.createElement("div");
+    empty.className = "court-rows-empty";
+    empty.textContent = "empty";
+    container.appendChild(empty);
+    return;
+  }
   list.forEach((p) => {
     const btn = document.createElement("button");
     btn.type = "button";
@@ -236,6 +243,7 @@ async function init() {
     });
     const savedCoach = getSavedCoach();
     if (savedCoach && coaches.includes(savedCoach)) els.coachSelect.value = savedCoach;
+    updateHeaderCoach(els.coachSelect.value);
 
     roster = players;
     renderPlayerJog();
@@ -260,7 +268,25 @@ async function init() {
 
 els.coachSelect.addEventListener("change", () => {
   saveCoach(els.coachSelect.value);
+  updateHeaderCoach(els.coachSelect.value);
 });
+
+initHeaderMenu(resetPageState);
+
+// Clears this device's local state only (undo stack, tallies, on-court
+// roster) — never touches the Google Sheet. See the Reset button in the
+// header menu.
+function resetPageState() {
+  localStorage.removeItem(STATE_KEY);
+  onCourt = { side1: [], side2: [] };
+  activePlayerNumber = null;
+  jogSelectedPlayerNumber = null;
+  sessionTallies = {};
+  undoStack = [];
+  renderCourt();
+  refreshUI();
+  setToast("Local data reset for this device.", false);
+}
 
 els.addSide1Btn.addEventListener("click", () => addToSide("side1"));
 els.addSide2Btn.addEventListener("click", () => addToSide("side2"));
