@@ -557,3 +557,69 @@ select {
   color: var(--gray);
   cursor: not-allowed;
 }
+
+.rail-time-input {
+  width: 100%;
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 700;
+  padding: 8px 6px;
+  border-radius: 8px;
+  border: 2px solid #cdd6df;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.rail-time-input:disabled {
+  opacity: 0.5;
+}
+
+.quality-red.active {
+  border-color: var(--red);
+  background: var(--red);
+  color: white;
+}
+
+.quality-red.active .pts {
+  color: #ffe0e0;
+}
+
+.quality-yellow.active {
+  border-color: #f5c518;
+  background: #f5c518;
+  color: var(--text);
+}
+
+.quality-yellow.active .pts {
+  color: #5a4600;
+}
+
+.quality-green.active {
+  border-color: var(--green);
+  background: var(--green);
+  color: white;
+}
+
+.quality-green.active .pts {
+  color: #dff5ec;
+}
+
+.gp-plus.active {
+  border-color: var(--green);
+  background: var(--green);
+  color: white;
+}
+
+.gp-plus.active .pts {
+  color: #dff5ec;
+}
+
+.gp-minus.active {
+  border-color: var(--red);
+  background: var(--red);
+  color: white;
+}
+
+.gp-minus.active .pts {
+  color: #ffe0e0;
+}

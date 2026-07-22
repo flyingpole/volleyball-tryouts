@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Game Play — Volleyball Tryouts</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="app evaluator-app">
+  <header class="top compact">
+    <h1>Game Play</h1>
+    <a class="back-link" href="index.html" style="color:#c3d0e0;">&larr; Skills</a>
+  </header>
+
+  <div id="configBanner" class="banner" hidden>
+    ⚠ Not connected to the Google Sheet yet. Deploy the Apps Script Web App
+    and paste its URL into <code>config.js</code> — see README.md.
+  </div>
+
+  <div class="quick-controls">
+    <select id="coachSelect" aria-label="Coach">
+      <option value="">Coach…</option>
+    </select>
+    <input type="text" inputmode="numeric" id="startNumberInput" placeholder="Start #" aria-label="Starting player number" />
+    <button type="button" id="loadGroupBtn">Load</button>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <main class="evaluator-grid">
+    <div class="col-players">
+      <div id="playerRows" class="rows-col"></div>
+
+      <div class="player-jog-label">Find player</div>
+      <div class="player-jog-wrap">
+        <div class="player-jog" id="playerJog"></div>
+        <div class="player-jog-highlight"></div>
+      </div>
+    </div>
+
+    <div class="score-rail">
+      <button type="button" class="rail-btn rail-undo" id="undoBtn" disabled>UNDO</button>
+      <div class="active-player-mini" id="activePlayerLabel">Load a group</div>
+
+      <button type="button" class="toggle rail-btn gp-plus" id="btnPlus" data-result="+">+1<span class="pts">point won</span></button>
+      <button type="button" class="toggle rail-btn gp-minus" id="btnMinus" data-result="-">−1<span class="pts">mistake</span></button>
+    </div>
+  </main>
+</div>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+<script src="gameplay.js"></script>
+</body>
+</html>
