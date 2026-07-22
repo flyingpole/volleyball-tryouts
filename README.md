@@ -108,8 +108,22 @@ set specifically, even though ranking itself uses the combined rate.
 
 ## How the Game Play page works
 
-Same player list, jog wheel, coach picker, and Undo. Nine buttons, grouped
-into five play types, each logging immediately:
+This page works differently from the others — a scrimmage only has a
+handful of players on the court at once, so instead of a Start#/Load
+numeric range, you build an on-court roster by hand:
+
+1. Scroll (or tap directly in) the **Find player** list to pick someone from
+   the full roster.
+2. Tap **+ Side 1** or **+ Side 2** to add them to that side of the net —
+   sorted numerically low to high, up to 12 players per side. Adding someone
+   who's already on the *other* side moves them instead of blocking you.
+3. Tap a jersey number in either column to make them the active player.
+4. Tap **REMOVE** to sub the active player off the court entirely. Their
+   running total isn't lost — subbing them back in later picks up where
+   they left off.
+
+Coach picker and Undo work the same as every other page. Nine scoring
+buttons, grouped into five play types, each logging immediately:
 
 - **Serve**: Service Ace (+1) / Serve Error (-1)
 - **Serve Receive**: Serve Receive (+1) / Serve Receive Error (-1)

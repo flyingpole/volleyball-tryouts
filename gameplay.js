@@ -1,5 +1,5 @@
 const SKILL = "Game Play";
-const GROUP_SIZE = 10;
+const MAX_PER_SIDE = 12;
 const MAX_UNDO = 5;
 const JOG_ITEM_HEIGHT = 36;
 const STATE_KEY = "vbtryouts_gameplay_state";
@@ -10,70 +10,94 @@ const BASE_POINTS = {
   "Dig Error": -1,
   "Block": 1, "Block Error": -1,
 };
+const SIDE_LABELS = { side1: "Side 1", side2: "Side 2" };
 
 let roster = [];
-let visiblePlayers = []; // up to 10 roster entries in the loaded number range, ascending
-let activeIndex = null; // index into visiblePlayers
-let sessionTallies = {}; // playerNumber -> { attempts, points } — points here is the running total shown
+// Unlike every other skill page, Game Play doesn't work through the roster
+// in numerical order — a scrimmage only has a handful of players on the
+// court at once, picked by the coach rather than loaded as a numeric range.
+let onCourt = { side1: [], side2: [] }; // player objects, sorted ascending by playerNumber, capped at MAX_PER_SIDE each
+let activePlayerNumber = null; // whichever on-court player is currently selected for scoring
+let jogSelectedPlayerNumber = null; // whichever roster player is centered/tapped in "Find player" — the add candidate
+let sessionTallies = {}; // playerNumber -> { attempts, points }
 let undoStack = []; // most-recent-first, confirmed (server-acknowledged) attempts only, capped at MAX_UNDO
 let jogSettleTimer = null;
-let seedStart = null; // the start number a rotation began at; where it loops back to at roster's end
 
 function persistState() {
   saveJSON(STATE_KEY, {
-    startNumber: els.startNumberInput.value,
-    activePlayerNumber: activePlayer() ? activePlayer().playerNumber : undefined,
+    side1: onCourt.side1.map((p) => p.playerNumber),
+    side2: onCourt.side2.map((p) => p.playerNumber),
+    activePlayerNumber,
     tallies: sessionTallies,
     undoStack,
-    seedStart,
   });
 }
 
 const els = {
   banner: document.getElementById("configBanner"),
   coachSelect: document.getElementById("coachSelect"),
-  startNumberInput: document.getElementById("startNumberInput"),
-  loadGroupBtn: document.getElementById("loadGroupBtn"),
-  playerRows: document.getElementById("playerRows"),
+  side1Rows: document.getElementById("side1Rows"),
+  side2Rows: document.getElementById("side2Rows"),
   playerJog: document.getElementById("playerJog"),
+  addSide1Btn: document.getElementById("addSide1Btn"),
+  addSide2Btn: document.getElementById("addSide2Btn"),
   activePlayerLabel: document.getElementById("activePlayerLabel"),
   undoBtn: document.getElementById("undoBtn"),
+  removeBtn: document.getElementById("removeBtn"),
   toast: document.getElementById("toast"),
 };
 
 const scoreButtons = Array.from(document.querySelectorAll(".gp-grid button"));
 
 function activePlayer() {
-  return activeIndex === null ? null : visiblePlayers[activeIndex];
+  if (activePlayerNumber === null) return null;
+  return onCourt.side1.find((p) => String(p.playerNumber) === String(activePlayerNumber))
+    || onCourt.side2.find((p) => String(p.playerNumber) === String(activePlayerNumber))
+    || null;
 }
 
-function renderRows() {
-  els.playerRows.innerHTML = "";
-  visiblePlayers.forEach((p, idx) => {
+function findOnCourtSide(playerNumber) {
+  if (onCourt.side1.some((p) => String(p.playerNumber) === String(playerNumber))) return "side1";
+  if (onCourt.side2.some((p) => String(p.playerNumber) === String(playerNumber))) return "side2";
+  return null;
+}
+
+function sortAscending(list) {
+  list.sort((a, b) => Number(a.playerNumber) - Number(b.playerNumber));
+}
+
+function renderCourtSide(container, list) {
+  container.innerHTML = "";
+  list.forEach((p) => {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "row-btn" + (idx === activeIndex ? " active" : "");
+    btn.className = "court-row" + (String(p.playerNumber) === String(activePlayerNumber) ? " active" : "");
 
     const label = document.createElement("span");
-    label.textContent = `#${p.playerNumber} — ${p.playerName || "(unnamed)"}`;
+    label.textContent = `#${p.playerNumber}`;
     btn.appendChild(label);
 
-    // Game Play's score is a running total (not an attempt count), so show
-    // the net points here instead of "N att" like the other skills.
+    // Game Play's score is a running total, not an attempt count — same
+    // reasoning as the row list this replaces.
     const tally = sessionTallies[p.playerNumber];
     const tallySpan = document.createElement("span");
     tallySpan.className = "tally";
     tallySpan.textContent = tally ? `${tally.points > 0 ? "+" : ""}${tally.points}` : "";
     btn.appendChild(tallySpan);
 
-    btn.addEventListener("click", () => selectPlayer(idx));
-    els.playerRows.appendChild(btn);
+    btn.addEventListener("click", () => selectActivePlayer(p.playerNumber));
+    container.appendChild(btn);
   });
 }
 
-function selectPlayer(idx) {
-  activeIndex = idx;
-  renderRows();
+function renderCourt() {
+  renderCourtSide(els.side1Rows, onCourt.side1);
+  renderCourtSide(els.side2Rows, onCourt.side2);
+}
+
+function selectActivePlayer(playerNumber) {
+  activePlayerNumber = playerNumber;
+  renderCourt();
   refreshUI();
   persistState();
 }
@@ -81,11 +105,12 @@ function selectPlayer(idx) {
 function refreshUI() {
   const p = activePlayer();
   els.activePlayerLabel.textContent = p
-    ? `#${p.playerNumber} ${p.playerName || "(unnamed)"}`
-    : (visiblePlayers.length ? "Tap a player" : "Load a group");
+    ? `#${p.playerNumber}`
+    : (onCourt.side1.length || onCourt.side2.length ? "Tap a player" : "Add players to the court");
 
   const ready = !!p && isScriptConfigured();
   scoreButtons.forEach((btn) => { btn.disabled = !ready; });
+  els.removeBtn.disabled = !p;
 
   els.undoBtn.disabled = !undoStack.length || !isScriptConfigured();
   els.undoBtn.textContent = undoStack.length ? `UNDO (${undoStack.length})` : "UNDO";
@@ -96,45 +121,10 @@ function setToast(message, isError) {
   els.toast.className = "toast " + (isError ? "error" : "success");
 }
 
-// preferredPlayerNumber: used when restoring a saved session or sliding to a
-// specific player, so that player stays selected instead of defaulting to the
-// first in the group. reseed: true when this is a deliberate new starting
-// point (manual Load, jog wheel) rather than an automatic slide-forward —
-// only deliberate seeds get remembered as the rotation's loop-back point.
-function loadGroup(preferredPlayerNumber, reseed) {
-  const start = parseInt(els.startNumberInput.value, 10);
-  if (!Number.isFinite(start)) {
-    setToast("Enter a starting player number.", true);
-    return;
-  }
-  if (reseed) seedStart = start;
-  visiblePlayers = roster
-    .filter((p) => {
-      const n = Number(p.playerNumber);
-      return n >= start && n < start + GROUP_SIZE;
-    })
-    .sort((a, b) => Number(a.playerNumber) - Number(b.playerNumber));
-
-  let idx = 0;
-  if (preferredPlayerNumber !== undefined) {
-    const found = visiblePlayers.findIndex((p) => String(p.playerNumber) === String(preferredPlayerNumber));
-    if (found !== -1) idx = found;
-  }
-  activeIndex = visiblePlayers.length ? idx : null;
-  renderRows();
-  refreshUI();
-  persistState();
-
-  if (!visiblePlayers.length) {
-    setToast(`No roster players found from #${start} to #${start + GROUP_SIZE - 1}.`, true);
-  } else {
-    setToast("", false);
-  }
-}
-
-// Full-roster scrub list for finding a player who's out of the loaded
-// group's numeric range. Scroll-snap does the "jog wheel" feel natively;
-// whichever item settles under the center highlight becomes the new focus.
+// Full-roster scrub list — the only way to find a player on this page, since
+// there's no numeric Start#/Load range here. Tapping an item directly, or
+// letting scroll-snap settle one under the highlight band, both mark that
+// player as the "add candidate" the two side buttons act on.
 function renderPlayerJog() {
   const jog = els.playerJog;
   jog.innerHTML = "";
@@ -153,6 +143,7 @@ function renderPlayerJog() {
       item.className = "player-jog-item";
       item.textContent = `#${p.playerNumber} ${p.playerName || ""}`;
       item.dataset.playerNumber = p.playerNumber;
+      item.addEventListener("click", () => { jogSelectedPlayerNumber = p.playerNumber; });
       jog.appendChild(item);
     });
 
@@ -177,40 +168,55 @@ function onJogSettled() {
       closest = item;
     }
   });
-  if (closest) jumpToPlayer(Number(closest.dataset.playerNumber));
+  if (closest) jogSelectedPlayerNumber = Number(closest.dataset.playerNumber);
 }
 
-// Re-centers the main 10-player group so the found player lands near the
-// middle, with players above/below shown by their normal numeric sequence.
-function jumpToPlayer(playerNumber) {
-  els.startNumberInput.value = String(playerNumber - 4);
-  loadGroup(playerNumber, true);
-}
-
-// Moves to the next player after a score. Within the visible 10, that's just
-// the next row. At the bottom of the 10, instead of wrapping back to the top
-// of the same group, the whole window slides forward one player number —
-// there's no need to keep re-picking a starting point as you work through
-// the roster. If sliding forward would run past the last player on the
-// roster, loop back to wherever this rotation was originally seeded from.
-function advanceAfterScore() {
-  if (!visiblePlayers.length) return;
-  if (activeIndex < visiblePlayers.length - 1) {
-    activeIndex += 1;
+// Adds the current "Find player" candidate to a side, capped at
+// MAX_PER_SIDE. If they're already on the OTHER side, moves them instead of
+// blocking — a coach fixing a mis-tap shouldn't have to remove-then-re-add.
+function addToSide(sideKey) {
+  if (jogSelectedPlayerNumber === null) {
+    setToast("Scroll to or tap a player in the list first.", true);
     return;
   }
+  const player = roster.find((p) => String(p.playerNumber) === String(jogSelectedPlayerNumber));
+  if (!player) return;
 
-  const lastNum = Number(visiblePlayers[visiblePlayers.length - 1].playerNumber);
-  const hasMoreAhead = roster.some((p) => Number(p.playerNumber) > lastNum);
-
-  if (hasMoreAhead) {
-    const start = parseInt(els.startNumberInput.value, 10);
-    els.startNumberInput.value = String((Number.isFinite(start) ? start : lastNum - GROUP_SIZE + 1) + 1);
-    loadGroup(lastNum + 1);
-  } else if (seedStart !== null) {
-    els.startNumberInput.value = String(seedStart);
-    loadGroup();
+  const existingSide = findOnCourtSide(player.playerNumber);
+  if (existingSide === sideKey) {
+    setToast(`#${player.playerNumber} is already on ${SIDE_LABELS[sideKey]}.`, true);
+    return;
   }
+  if (onCourt[sideKey].length >= MAX_PER_SIDE) {
+    setToast(`${SIDE_LABELS[sideKey]} is full (${MAX_PER_SIDE} players) — remove someone first.`, true);
+    return;
+  }
+  if (existingSide) {
+    onCourt[existingSide] = onCourt[existingSide].filter((p) => String(p.playerNumber) !== String(player.playerNumber));
+  }
+
+  onCourt[sideKey].push(player);
+  sortAscending(onCourt[sideKey]);
+  activePlayerNumber = player.playerNumber;
+  renderCourt();
+  refreshUI();
+  persistState();
+  setToast(`✓ Added #${player.playerNumber} to ${SIDE_LABELS[sideKey]}`, false);
+}
+
+// Subs the active player off the court entirely. Their tally/undo history
+// stays intact (keyed by player number, not court membership) — subbing
+// them back in later picks up right where they left off.
+function removeActivePlayer() {
+  const p = activePlayer();
+  if (!p) return;
+  const side = findOnCourtSide(p.playerNumber);
+  if (side) onCourt[side] = onCourt[side].filter((x) => String(x.playerNumber) !== String(p.playerNumber));
+  activePlayerNumber = null;
+  renderCourt();
+  refreshUI();
+  persistState();
+  setToast(`Removed #${p.playerNumber} from the court`, false);
 }
 
 async function init() {
@@ -237,13 +243,15 @@ async function init() {
     const savedState = loadJSON(STATE_KEY, null);
     if (savedState && savedState.tallies) sessionTallies = savedState.tallies;
     if (savedState && Array.isArray(savedState.undoStack)) undoStack = savedState.undoStack;
-    if (savedState && savedState.startNumber) {
-      seedStart = Number.isFinite(savedState.seedStart)
-        ? savedState.seedStart
-        : parseInt(savedState.startNumber, 10);
-      els.startNumberInput.value = savedState.startNumber;
-      loadGroup(savedState.activePlayerNumber);
+    if (savedState) {
+      const byNumber = (num) => roster.find((p) => String(p.playerNumber) === String(num));
+      onCourt.side1 = (savedState.side1 || []).map(byNumber).filter(Boolean);
+      onCourt.side2 = (savedState.side2 || []).map(byNumber).filter(Boolean);
+      sortAscending(onCourt.side1);
+      sortAscending(onCourt.side2);
+      activePlayerNumber = savedState.activePlayerNumber ?? null;
     }
+    renderCourt();
   } catch (err) {
     setToast(`Couldn't load setup data: ${err.message}`, true);
   }
@@ -254,10 +262,9 @@ els.coachSelect.addEventListener("change", () => {
   saveCoach(els.coachSelect.value);
 });
 
-els.loadGroupBtn.addEventListener("click", () => loadGroup(undefined, true));
-els.startNumberInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") loadGroup(undefined, true);
-});
+els.addSide1Btn.addEventListener("click", () => addToSide("side1"));
+els.addSide2Btn.addEventListener("click", () => addToSide("side2"));
+els.removeBtn.addEventListener("click", removeActivePlayer);
 
 scoreButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -283,10 +290,10 @@ function pushUndoEntry(entry) {
   if (undoStack.length > MAX_UNDO) undoStack.length = MAX_UNDO;
 }
 
-// Every button IS the score (+1 or -1), so there's no pending selection step
-// — tapping a button logs immediately. Updates state and the screen right
-// away, confirms with the server in the background, and rolls back only if
-// the server explicitly rejects it (see app.js postJSON).
+// Every button IS the score, so there's no pending selection step — tapping
+// one logs immediately. Updates state and the screen right away, confirms
+// with the server in the background, and rolls back only if the server
+// explicitly rejects it (see app.js postJSON).
 function submitAttempt(result) {
   const p = activePlayer();
   if (!p) return;
@@ -300,10 +307,9 @@ function submitAttempt(result) {
   const sign = pts > 0 ? "+1" : "−1";
 
   adjustTally(p.playerNumber, 1, pts);
-  advanceAfterScore();
-  renderRows();
+  renderCourt();
   refreshUI();
-  setToast(`✓ #${p.playerNumber} ${p.playerName} — ${result} (${sign}) (saving…)`, false);
+  setToast(`✓ #${p.playerNumber} — ${result} (${sign}) (saving…)`, false);
   persistState();
 
   postAttempt({ coach, playerNumber: p.playerNumber, playerName: p.playerName, skill: SKILL, result })
@@ -315,17 +321,17 @@ function submitAttempt(result) {
         playerName: p.playerName,
         points: response.points ?? pts,
       });
-      setToast(`✓ #${p.playerNumber} ${p.playerName} — ${result} (${sign})`, false);
+      setToast(`✓ #${p.playerNumber} — ${result} (${sign})`, false);
       refreshUI();
       persistState();
     })
     .catch((err) => {
       if (err.confirmed) {
         adjustTally(p.playerNumber, -1, -pts);
-        renderRows();
-        setToast(`⚠ #${p.playerNumber} ${p.playerName} failed to save: ${err.message}`, true);
+        renderCourt();
+        setToast(`⚠ #${p.playerNumber} failed to save: ${err.message}`, true);
       } else {
-        setToast(`⚠ #${p.playerNumber} ${p.playerName}: couldn't confirm save (${err.message}). Check the Log sheet before re-scoring.`, true);
+        setToast(`⚠ #${p.playerNumber}: couldn't confirm save (${err.message}). Check the Log sheet before re-scoring.`, true);
       }
       persistState();
     });
@@ -336,22 +342,21 @@ function performUndo() {
   const undone = undoStack.shift();
 
   adjustTally(undone.playerNumber, -1, -undone.points);
-  const idx = visiblePlayers.findIndex((p) => String(p.playerNumber) === String(undone.playerNumber));
-  if (idx !== -1) activeIndex = idx;
-  renderRows();
+  if (findOnCourtSide(undone.playerNumber)) activePlayerNumber = undone.playerNumber;
+  renderCourt();
   refreshUI();
-  setToast(`↩ Undoing #${undone.playerNumber} ${undone.playerName}…`, false);
+  setToast(`↩ Undoing #${undone.playerNumber}…`, false);
   persistState();
 
   postUndo({ coach: undone.coach, rowNumber: undone.rowNumber })
     .then(() => {
-      setToast(`↩ Undid #${undone.playerNumber} ${undone.playerName}`, false);
+      setToast(`↩ Undid #${undone.playerNumber}`, false);
     })
     .catch((err) => {
       if (err.confirmed) {
         undoStack.unshift(undone);
         adjustTally(undone.playerNumber, 1, undone.points);
-        renderRows();
+        renderCourt();
         refreshUI();
         setToast(`Couldn't undo: ${err.message}`, true);
       } else {

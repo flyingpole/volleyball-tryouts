@@ -22,26 +22,38 @@
     <select id="coachSelect" aria-label="Coach">
       <option value="">Coach…</option>
     </select>
-    <input type="text" inputmode="numeric" id="startNumberInput" placeholder="Start #" aria-label="Starting player number" />
-    <button type="button" id="loadGroupBtn">Load</button>
   </div>
 
   <div class="toast" id="toast"></div>
 
   <main class="evaluator-grid">
     <div class="col-players">
-      <div id="playerRows" class="rows-col"></div>
+      <div class="court-columns">
+        <div class="court-col">
+          <div class="player-jog-label">Side 1</div>
+          <div id="side1Rows" class="court-rows"></div>
+        </div>
+        <div class="court-col">
+          <div class="player-jog-label">Side 2</div>
+          <div id="side2Rows" class="court-rows"></div>
+        </div>
+      </div>
 
       <div class="player-jog-label">Find player</div>
-      <div class="player-jog-wrap">
+      <div class="player-jog-wrap compact">
         <div class="player-jog" id="playerJog"></div>
         <div class="player-jog-highlight"></div>
+      </div>
+      <div class="court-add-row">
+        <button type="button" id="addSide1Btn">+ Side 1</button>
+        <button type="button" id="addSide2Btn">+ Side 2</button>
       </div>
     </div>
 
     <div class="score-rail">
       <button type="button" class="rail-btn rail-undo" id="undoBtn" disabled>UNDO</button>
-      <div class="active-player-mini" id="activePlayerLabel">Load a group</div>
+      <button type="button" class="rail-btn rail-remove" id="removeBtn" disabled>REMOVE</button>
+      <div class="active-player-mini" id="activePlayerLabel">Add players to the court</div>
 
       <div class="gp-grid">
         <button type="button" class="toggle rail-btn gp-plus" data-result="Service Ace">ACE<span class="pts">+1</span></button>
