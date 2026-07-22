@@ -3,6 +3,12 @@
 // lives in the bound Google Sheet's Apps Script editor (Extensions > Apps Script).
 // See README.md for deployment steps.
 
+// Bump this string whenever this file changes. After redeploying (Deploy >
+// Manage deployments > Edit > New version > Deploy), open the Web app URL
+// directly in a browser with no query string — the JSON response's
+// "version" field should match this, confirming the redeploy actually took.
+const CODE_VERSION = "2026-07-21-roster-gap-fix";
+
 const SHEETS = {
   ROSTER: "Roster",
   LOG: "Log",
@@ -173,7 +179,7 @@ function doGet(e) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   if (action === "roster") return jsonResponse({ players: readRoster(ss) });
   if (action === "coaches") return jsonResponse({ coaches: COACHES });
-  return jsonResponse({ status: "ok" });
+  return jsonResponse({ status: "ok", version: CODE_VERSION });
 }
 
 function doPost(e) {
