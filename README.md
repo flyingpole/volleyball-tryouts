@@ -44,6 +44,21 @@ be tapped repeatedly to walk back up to 5 attempts — it survives a page
 reload too. Undoing soft-deletes the Log row (flags it rather than removing
 it) so row numbers never shift under other coaches' concurrent submissions.
 
+## How the Passing page works
+
+Same player list, jog wheel, coach picker, and Undo as Serving. Scoring is
+simpler — every button IS the score, so tapping one logs immediately with no
+separate confirm step:
+
+- **0-Pass**, **1-Pass**, **2-Pass**, or **3-Pass** — logs that grade and
+  auto-advances to the next player.
+
+A player's Passing score is the *average* of all their pass grades (e.g.
+0, 3, 1 averages to 1.33) — computed server-side the same way as every other
+skill. `Passing Rankings` also tracks **0-Pass %** (their share of passes
+graded 0) and uses it as a tie-breaker: among players with an equal average,
+the one with the lower 0-Pass % ranks higher.
+
 ## One-time setup
 
 ### 1. Paste the backend into your Google Sheet
@@ -65,7 +80,9 @@ dropdown.
    dropdown next to the Run button, and click **Run**.
 2. Approve the permissions prompt (it needs to edit the spreadsheet it's
    bound to). This creates/rebuilds `Roster`, `Log`, `Summary Sheet`, one tab
-   per name in `COACHES`, and `Serving Rankings`.
+   per name in `COACHES`, `Serving Rankings`, `Passing Rankings`, and a
+   hidden `Passing Data` helper tab (used internally for Passing's 0-Pass %
+   tie-break sort — no need to open it).
 3. **If you already have a tab with columns like `Player #, Name, Positions,
    Grade, Serving, Passing, Attacking Pin, Attacking MB, Blocking`** — rename
    that tab to exactly `Summary Sheet` before running `setupSheet`. The script
@@ -88,8 +105,9 @@ lost, though Positions/Grade will be blank until you fill them in.
 
 `Summary Sheet` and every coach's tab mirror the same columns — Player #,
 Name, Positions, Grade, then one average-score column per skill (Serving,
-Passing, Attacking Pin, Attacking MB, Blocking). Only Serving has a scoring UI
-so far; the other skill columns will just stay blank until those pages exist.
+Passing, Attacking Pin, Attacking MB, Blocking). Serving and Passing have a
+scoring UI so far; the other skill columns will just stay blank until those
+pages exist.
 
 ### 5. Deploy the Web App
 1. In the Apps Script editor, click **Deploy → New deployment**.
@@ -115,26 +133,36 @@ Already enabled — the app is live at
 coaches (they'll land on the skill picker; tap **Serving**). It picks up
 `config.js` changes as soon as you push them (usually within a minute).
 
-## The rankings tab
+## The rankings tabs
 
-`Serving Rankings` shows every player sorted by average Serving score (filter
-by position with the dropdown in B1), with attempt count, distinct-coach
-count, and a **⚠ Needs more looks** flag. A player is flagged if they have
-fewer than 3 attempts, fewer than 2 coaches have evaluated them, or their
-score is within 0.3 of the next-ranked player — tune these in `Code.gs`
-(`FLAG_MIN_ATTEMPTS`, `FLAG_MIN_COACHES`, `FLAG_SCORE_GAP`).
+Both `Serving Rankings` and `Passing Rankings` show every player sorted by
+that skill's average score (filter by position with the dropdown in B1),
+with attempt count, distinct-coach count, and a **⚠ Needs more looks** flag.
+A player is flagged if they have fewer than 3 attempts, fewer than 2 coaches
+have evaluated them, or their score is within 0.3 of the next-ranked player —
+tune these in `Code.gs` (`FLAG_MIN_ATTEMPTS`, `FLAG_MIN_COACHES`,
+`FLAG_SCORE_GAP`). `Passing Rankings` additionally breaks ties by 0-Pass %
+(lower is better) via the hidden `Passing Data` helper tab.
 
 ## Adding a new skill later
 
 1. Decide that skill's button set and point values, then add a
-   `computeXScore`-style function in `Code.gs` alongside `computeServingScore`.
-2. In `setupSheet()`, add a call to `buildSkillRankingsSheet(sheet, "Passing",
-   "F")` (column letter from the `SKILLS` list at the top of `Code.gs`) — the
-   `Summary Sheet`/coach tab columns are already generic and pick up any skill
-   name found in `Log` automatically.
-3. Duplicate `serving.html` / `serving.js` into e.g. `passing.html` /
-   `passing.js` with buttons matching that skill's scoring rules, and enable
-   its link on `index.html`.
+   `computeXScore`-style function in `Code.gs`, and a branch for it in
+   `computePoints()`.
+2. In `setupSheet()`, add a rankings sheet for it:
+   - No tie-break needed → `buildSkillRankingsSheet(sheet, "SkillName", "F")`
+     (column letter from the `SKILLS` list at the top of `Code.gs`), same
+     pattern as Serving.
+   - Need a secondary sort key not on Summary Sheet (like Passing's 0-Pass %)
+     → `buildSkillDataSheet(...)` + `buildTieBreakRankingsSheet(...)`, same
+     pattern as Passing.
+   The `Summary Sheet`/coach tab columns are already generic and pick up any
+   skill name found in `Log` automatically — no changes needed there.
+3. Duplicate `serving.html` / `serving.js` (or the simpler `passing.html` /
+   `passing.js`, if the new skill has no multi-step scoring like Serving's
+   velocity-then-target flow) into e.g. `blocking.html` / `blocking.js` with
+   buttons matching that skill's scoring rules, and enable its link on
+   `index.html`.
 
 ## Local development
 

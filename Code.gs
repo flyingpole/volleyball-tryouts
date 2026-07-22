@@ -7,13 +7,15 @@
 // Manage deployments > Edit > New version > Deploy), open the Web app URL
 // directly in a browser with no query string — the JSON response's
 // "version" field should match this, confirming the redeploy actually took.
-const CODE_VERSION = "2026-07-21-roster-gap-fix";
+const CODE_VERSION = "2026-07-21-add-passing";
 
 const SHEETS = {
   ROSTER: "Roster",
   LOG: "Log",
   SUMMARY: "Summary Sheet",
   SERVING_RANKINGS: "Serving Rankings",
+  PASSING_RANKINGS: "Passing Rankings",
+  PASSING_DATA: "Passing Data", // hidden helper sheet, not for manual editing
 };
 
 // Fixed list of coaches/evaluators — each gets their own tab, and the app's
@@ -64,6 +66,9 @@ function setupSheet() {
     buildAggregateSheet(getOrCreateSheet(ss, coach), coach);
   });
   buildSkillRankingsSheet(getOrCreateSheet(ss, SHEETS.SERVING_RANKINGS), "Serving", "E");
+
+  buildSkillDataSheet(getOrCreateSheet(ss, SHEETS.PASSING_DATA), "Passing", "F", "0-Pass");
+  buildTieBreakRankingsSheet(getOrCreateSheet(ss, SHEETS.PASSING_RANKINGS), "Passing", SHEETS.PASSING_DATA, "0-Pass %");
 }
 
 function getOrCreateSheet(ss, name) {
@@ -171,6 +176,80 @@ function buildSkillRankingsSheet(sheet, skillName, summaryColLetter) {
   sheet.getRange(4, 9, ROSTER_MAX_ROWS, 1).setFormulas(colI);
 }
 
+// Hidden helper sheet, one row per roster row (same alignment as Summary
+// Sheet): Player #, Name, Positions, Grade, Avg, Attempts, Coaches, and the
+// rate of "zeroResultValue" results (e.g. 0-Pass %). Exists so a rankings
+// sheet can sort by a secondary key that isn't on Summary Sheet — see
+// buildTieBreakRankingsSheet. Not meant to be opened/edited manually.
+function buildSkillDataSheet(sheet, skillName, summaryColLetter, zeroResultValue) {
+  sheet.clear();
+  sheet.getRange(1, 1, ROSTER_MAX_ROWS + 5, 12).clearDataValidations();
+  const headers = ["Player #", "Name", "Positions", "Grade", "Avg", "Attempts", "Coaches", "Zero Rate"];
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold");
+  sheet.setFrozenRows(1);
+
+  const startRow = 2;
+  const colA = [], colB = [], colC = [], colD = [], colE = [], colF = [], colG = [], colH = [];
+  for (let i = 0; i < ROSTER_MAX_ROWS; i++) {
+    const r = startRow + i;
+    colA.push([`=IF(Roster!A${r}="","",Roster!A${r})`]);
+    colB.push([`=IF(Roster!A${r}="","",Roster!B${r})`]);
+    colC.push([`=IF(Roster!A${r}="","",Roster!C${r})`]);
+    colD.push([`=IF(Roster!A${r}="","",Roster!D${r})`]);
+    colE.push([`=IF($A${r}="","",'${SHEETS.SUMMARY}'!${summaryColLetter}${r})`]);
+    colF.push([`=IF($A${r}="","",COUNTIFS(Log!$C:$C,$A${r},Log!$E:$E,"${skillName}",Log!$I:$I,"<>TRUE"))`]);
+    colG.push([`=IF($A${r}="","",IFERROR(COUNTA(UNIQUE(FILTER(Log!$B:$B,Log!$C:$C=$A${r},Log!$E:$E="${skillName}",Log!$I:$I<>true))),0))`]);
+    colH.push([`=IF($A${r}="","",IFERROR(COUNTIFS(Log!$C:$C,$A${r},Log!$E:$E,"${skillName}",Log!$F:$F,"${zeroResultValue}",Log!$I:$I,"<>TRUE")/$F${r},""))`]);
+  }
+  [colA, colB, colC, colD, colE, colF, colG, colH].forEach((col, idx) => {
+    sheet.getRange(startRow, idx + 1, ROSTER_MAX_ROWS, 1).setFormulas(col);
+  });
+
+  sheet.hideSheet();
+}
+
+// Like buildSkillRankingsSheet, but sorts by avg score descending with a
+// secondary tie-break (ascending) on the "zero rate" column from the given
+// data sheet (see buildSkillDataSheet) — e.g. among players tied on Passing
+// average, the one with the lower 0-Pass % ranks higher. QUERY's single
+// "order by" can't do this since the tie-break value isn't on Summary Sheet,
+// so this uses SORT+FILTER over the hidden data sheet instead.
+function buildTieBreakRankingsSheet(sheet, skillName, dataSheetName, zeroRateLabel) {
+  sheet.clear();
+  sheet.getRange(1, 1, ROSTER_MAX_ROWS + 5, 12).clearDataValidations();
+  sheet.getRange("A1").setValue("Position filter:").setFontWeight("bold");
+  sheet.getRange("B1").setValue("All");
+  const rule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(["All"].concat(POSITION_FILTER_OPTIONS), true)
+    .build();
+  sheet.getRange("B1").setDataValidation(rule);
+
+  const headers = ["Rank", "Player #", "Name", "Positions", "Grade", `${skillName} Avg`, "Attempts", "Coaches", zeroRateLabel, "Flag"];
+  sheet.getRange(3, 1, 1, headers.length).setValues([headers]).setFontWeight("bold");
+  sheet.setFrozenRows(3);
+
+  const lastRow = 1 + ROSTER_MAX_ROWS;
+  // Sort columns are 1-based indices into the FILTER's own output (A-H of
+  // the data sheet): 5 = Avg, 8 = Zero Rate. FILTER's condition args must
+  // each be a full boolean array, not a scalar — so the "All" branch reuses
+  // the has-a-player array instead of a bare TRUE, which FILTER would reject.
+  sheet.getRange("B4").setFormula(
+    `=IFERROR(SORT(FILTER('${dataSheetName}'!A2:H${lastRow}, '${dataSheetName}'!A2:A${lastRow}<>"", IF($B$1="All", '${dataSheetName}'!A2:A${lastRow}<>"", ISNUMBER(SEARCH($B$1,'${dataSheetName}'!C2:C${lastRow})))), 5, FALSE, 8, TRUE), "")`
+  );
+
+  // Spilled columns land at B..I: Player#, Name, Positions, Grade, Avg,
+  // Attempts, Coaches, ZeroRate.
+  const colA = [], colJ = [];
+  for (let i = 0; i < ROSTER_MAX_ROWS; i++) {
+    const r = 4 + i;
+    colA.push([`=IF(B${r}="","",ROW()-3)`]);
+    colJ.push([`=IF(B${r}="","",IFERROR(IF(OR(G${r}<${FLAG_MIN_ATTEMPTS},H${r}<${FLAG_MIN_COACHES},ABS(F${r}-F${r + 1})<${FLAG_SCORE_GAP}),"⚠ Needs more looks",""),""))`]);
+  }
+  sheet.getRange(4, 1, ROSTER_MAX_ROWS, 1).setFormulas(colA);
+  sheet.getRange(4, 10, ROSTER_MAX_ROWS, 1).setFormulas(colJ);
+  sheet.getRange(4, 9, ROSTER_MAX_ROWS, 1).setNumberFormat("0.0%");
+}
+
 // ---------------------------------------------------------------------------
 // Web app entry points
 // ---------------------------------------------------------------------------
@@ -206,7 +285,7 @@ function handleLogAttempt(ss, body) {
   }
 
   const hitTarget = !!body.hitTarget;
-  const points = computeServingScore(result, hitTarget);
+  const points = computePoints(skill, result, hitTarget);
 
   // Multiple coaches submit concurrently during tryouts, so the append +
   // "which row did I just write" read has to be atomic across requests.
@@ -273,6 +352,15 @@ function handleUndo(ss, body) {
   }
 }
 
+// Dispatches to the right scoring function for the skill being logged. Add a
+// branch here (and a compute*Score function) when a new skill's evaluation
+// UI ships.
+function computePoints(skill, result, hitTarget) {
+  if (skill === "Serving") return computeServingScore(result, hitTarget);
+  if (skill === "Passing") return computePassingScore(result);
+  throw new Error(`Unsupported skill "${skill}"`);
+}
+
 // Missed: 0 points (still logged as an attempt for stats).
 // Otherwise: velocity tier (Slow <30mph, Average 30-35mph, Fast >35mph) sets
 // the base score, +1 more if the target was hit.
@@ -285,6 +373,15 @@ function computeServingScore(result, hitTarget) {
   else throw new Error(`Unknown result "${result}"`);
   if (hitTarget) score += 1;
   return score;
+}
+
+// Each pass grade is its own score, 0-3 — no bonus step.
+function computePassingScore(result) {
+  if (result === "0-Pass") return 0;
+  if (result === "1-Pass") return 1;
+  if (result === "2-Pass") return 2;
+  if (result === "3-Pass") return 3;
+  throw new Error(`Unknown result "${result}"`);
 }
 
 function ensureCoachSheet(ss, coach) {

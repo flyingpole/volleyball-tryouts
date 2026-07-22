@@ -403,7 +403,7 @@ select {
   cursor: pointer;
 }
 
-.serving-app .toast {
+.evaluator-app .toast {
   margin: 0 12px;
   padding: 3px;
   min-height: 0.9em;

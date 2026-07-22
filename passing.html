@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-<title>Serving — Volleyball Tryouts</title>
+<title>Passing — Volleyball Tryouts</title>
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
 <div class="app evaluator-app">
   <header class="top compact">
-    <h1>Serving</h1>
+    <h1>Passing</h1>
     <a class="back-link" href="index.html" style="color:#c3d0e0;">&larr; Skills</a>
   </header>
 
@@ -42,20 +42,17 @@
     <div class="score-rail">
       <button type="button" class="rail-btn rail-undo" id="undoBtn" disabled>UNDO</button>
       <div class="active-player-mini" id="activePlayerLabel">Load a group</div>
-      <div class="score-mini" id="scoreNum">–</div>
 
-      <button type="button" class="toggle result rail-btn" id="btnMissed" data-result="Missed">MISS<span class="pts">0</span></button>
-      <button type="button" class="toggle result velocity rail-btn" id="btnV1" data-result="Slow">Slow<span class="pts">&lt;30 · 1pt</span></button>
-      <button type="button" class="toggle result velocity rail-btn" id="btnV2" data-result="Average">Average<span class="pts">30-35 · 2pt</span></button>
-      <button type="button" class="toggle result velocity rail-btn" id="btnV3" data-result="Fast">Fast<span class="pts">&gt;35 · 3pt</span></button>
-      <button type="button" class="toggle rail-btn" id="btnHitTarget" disabled>Target ✓<span class="pts">+1pt</span></button>
-      <button type="button" class="toggle rail-btn" id="btnMissedTarget" disabled>Target ✗<span class="pts">+0</span></button>
+      <button type="button" class="toggle rail-btn" id="btn0" data-result="0-Pass">0-Pass</button>
+      <button type="button" class="toggle rail-btn" id="btn1" data-result="1-Pass">1-Pass</button>
+      <button type="button" class="toggle rail-btn" id="btn2" data-result="2-Pass">2-Pass</button>
+      <button type="button" class="toggle rail-btn" id="btn3" data-result="3-Pass">3-Pass</button>
     </div>
   </main>
 </div>
 
 <script src="config.js"></script>
 <script src="app.js"></script>
-<script src="serving.js"></script>
+<script src="passing.js"></script>
 </body>
 </html>
