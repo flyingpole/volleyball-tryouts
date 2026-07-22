@@ -7,7 +7,7 @@
 // Manage deployments > Edit > New version > Deploy), open the Web app URL
 // directly in a browser with no query string — the JSON response's
 // "version" field should match this, confirming the redeploy actually took.
-const CODE_VERSION = "2026-07-21-summary-ranks";
+const CODE_VERSION = "2026-07-21-position-rankings";
 
 const SHEETS = {
   ROSTER: "Roster",
@@ -16,6 +16,7 @@ const SHEETS = {
   SERVING_RANKINGS: "Serving Rankings",
   PASSING_RANKINGS: "Passing Rankings",
   PASSING_DATA: "Passing Data", // hidden helper sheet, not for manual editing
+  POSITION_RANKINGS: "Position Rankings",
 };
 
 // Fixed list of coaches/evaluators — each gets their own tab, and the app's
@@ -39,11 +40,10 @@ const SKILLS = [
   { name: "Blocking", col: "I" },
 ];
 
-// Dropdown choices for the position filter on ranking sheets. Positions is a
-// free-text field on Roster (e.g. "OH, MB"), so this list is just for the
-// filter UI — edit it (or the data validation on each Rankings sheet) if
-// your team uses different position codes.
-const POSITION_FILTER_OPTIONS = ["OH", "OPP", "MB", "S", "D"];
+// Position codes used on Roster's free-text Positions field (e.g. "OH, MB")
+// — drives the filter dropdown on ranking sheets AND the per-position blocks
+// on Position Rankings. Edit this if your team uses different codes.
+const POSITION_FILTER_OPTIONS = ["OH", "RS", "MB", "Def", "S"];
 
 const ROSTER_MAX_ROWS = 250; // headroom for players; raise if a tryout group is bigger
 
@@ -69,6 +69,8 @@ function setupSheet() {
 
   buildSkillDataSheet(getOrCreateSheet(ss, SHEETS.PASSING_DATA), "Passing", "F", "0-Pass");
   buildTieBreakRankingsSheet(getOrCreateSheet(ss, SHEETS.PASSING_RANKINGS), "Passing", SHEETS.PASSING_DATA, "0-Pass %");
+
+  buildPositionRankingsSheet(getOrCreateSheet(ss, SHEETS.POSITION_RANKINGS));
 }
 
 function getOrCreateSheet(ss, name) {
@@ -91,6 +93,16 @@ function setupLogSheet(ss) {
   ];
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold");
   sheet.setFrozenRows(1);
+}
+
+// Builds a formula fragment that checks whether a comma-separated Positions
+// cell contains an exact position code — e.g. "S" must match "OH, S" but NOT
+// "RS" (a naive contains/SEARCH would wrongly match "RS" too, since it
+// contains the letter "S"). positionsRange is a sheet range reference (e.g.
+// "'Summary Sheet'!$C$2:$C$251"); positionExpr is either a quoted literal
+// (e.g. '"OH"') or a cell reference (e.g. "$B$1").
+function positionMatchFormula(positionsRange, positionExpr) {
+  return `ISNUMBER(SEARCH(","&${positionExpr}&",",","&SUBSTITUTE(${positionsRange}," ","")&","))`;
 }
 
 // Converts a 1-based column index to its spreadsheet letter (1 -> A, 27 -> AA).
@@ -206,9 +218,14 @@ function buildSkillRankingsSheet(sheet, skillName, summaryColLetter) {
   sheet.setFrozenRows(3);
 
   const lastRow = 1 + ROSTER_MAX_ROWS;
-  const select = `A,B,C,D,${summaryColLetter}`;
+  // Built from an array literal (not a plain A:I range) so summaryColLetter
+  // can be any skill column regardless of adjacency to D. FILTER's condition
+  // args must each be a full boolean array, not a scalar, so the "All"
+  // branch reuses the has-a-player array instead of a bare TRUE.
+  const hasPlayer = `'${SHEETS.SUMMARY}'!$A$2:$A$${lastRow}<>""`;
+  const positionMatch = positionMatchFormula(`'${SHEETS.SUMMARY}'!$C$2:$C$${lastRow}`, "$B$1");
   sheet.getRange("B4").setFormula(
-    `=IFERROR(QUERY('${SHEETS.SUMMARY}'!$A$2:$I$${lastRow}, IF($B$1="All", "select ${select} where A is not null order by ${summaryColLetter} desc", "select ${select} where A is not null and C contains '"&$B$1&"' order by ${summaryColLetter} desc"), 0), "")`
+    `=IFERROR(SORT(FILTER({'${SHEETS.SUMMARY}'!$A$2:$D$${lastRow},'${SHEETS.SUMMARY}'!$${summaryColLetter}$2:$${summaryColLetter}$${lastRow}}, ${hasPlayer}, IF($B$1="All", ${hasPlayer}, ${positionMatch})), 5, FALSE), "")`
   );
 
   const colA = [], colG = [], colH = [], colI = [];
@@ -282,8 +299,10 @@ function buildTieBreakRankingsSheet(sheet, skillName, dataSheetName, zeroRateLab
   // the data sheet): 5 = Avg, 8 = Zero Rate. FILTER's condition args must
   // each be a full boolean array, not a scalar — so the "All" branch reuses
   // the has-a-player array instead of a bare TRUE, which FILTER would reject.
+  const hasPlayer = `'${dataSheetName}'!A2:A${lastRow}<>""`;
+  const positionMatch = positionMatchFormula(`'${dataSheetName}'!C2:C${lastRow}`, "$B$1");
   sheet.getRange("B4").setFormula(
-    `=IFERROR(SORT(FILTER('${dataSheetName}'!A2:H${lastRow}, '${dataSheetName}'!A2:A${lastRow}<>"", IF($B$1="All", '${dataSheetName}'!A2:A${lastRow}<>"", ISNUMBER(SEARCH($B$1,'${dataSheetName}'!C2:C${lastRow})))), 5, FALSE, 8, TRUE), "")`
+    `=IFERROR(SORT(FILTER('${dataSheetName}'!A2:H${lastRow}, ${hasPlayer}, IF($B$1="All", ${hasPlayer}, ${positionMatch})), 5, FALSE, 8, TRUE), "")`
   );
 
   // Spilled columns land at B..I: Player#, Name, Positions, Grade, Avg,
@@ -301,6 +320,53 @@ function buildTieBreakRankingsSheet(sheet, skillName, dataSheetName, zeroRateLab
   sheet.getRange(4, 10, ROSTER_MAX_ROWS, 1).setFormulas(colJ);
   sheet.getRange(4, 11, ROSTER_MAX_ROWS, 1).setFormulas(colK);
   sheet.getRange(4, 9, ROSTER_MAX_ROWS, 1).setNumberFormat("0.0%");
+}
+
+// One tab, side by side: a separate ranked list (best to worst) for each
+// position in POSITION_FILTER_OPTIONS, so you can scan across and pick the
+// best available OH, RS, MB, Def, and Setter at a glance. Ranked by Summary
+// Sheet's Avg Rank ascending (lower is better — that's the cross-skill
+// composite, not any single skill), which only includes players with at
+// least one ranked skill.
+function buildPositionRankingsSheet(sheet) {
+  sheet.clear();
+  sheet.getRange(1, 1, ROSTER_MAX_ROWS + 5, 30).clearDataValidations();
+
+  const lastRow = 1 + ROSTER_MAX_ROWS;
+  const groupWidth = 4; // Rank, Player #, Name, Avg Rank
+  const gap = 1;
+  const dataStartRow = 3;
+
+  POSITION_FILTER_OPTIONS.forEach((pos, groupIdx) => {
+    const groupStart = groupIdx * (groupWidth + gap) + 1;
+    const rankCol = groupStart;
+    const playerCol = groupStart + 1;
+    const avgRankCol = groupStart + 3;
+    const playerLetter = columnLetter(playerCol);
+
+    sheet.getRange(1, groupStart, 1, groupWidth).merge()
+      .setValue(pos).setFontWeight("bold").setHorizontalAlignment("center")
+      .setBackground("#0b2545").setFontColor("#ffffff");
+    sheet.getRange(2, groupStart, 1, groupWidth)
+      .setValues([["Rank", "Player #", "Name", "Avg Rank"]]).setFontWeight("bold");
+
+    const escapedPos = `"${pos.replace(/"/g, '""')}"`;
+    const positionMatch = positionMatchFormula(`'${SHEETS.SUMMARY}'!$C$2:$C$${lastRow}`, escapedPos);
+    const hasRank = `'${SHEETS.SUMMARY}'!$O$2:$O$${lastRow}<>""`;
+    sheet.getRange(dataStartRow, playerCol).setFormula(
+      `=IFERROR(SORT(FILTER({'${SHEETS.SUMMARY}'!$A$2:$B$${lastRow},'${SHEETS.SUMMARY}'!$O$2:$O$${lastRow}}, ${hasRank}, ${positionMatch}), 3, TRUE), "")`
+    );
+
+    const rankFormulas = [];
+    for (let i = 0; i < ROSTER_MAX_ROWS; i++) {
+      const r = dataStartRow + i;
+      rankFormulas.push([`=IF(${playerLetter}${r}="","",ROW()-${dataStartRow - 1})`]);
+    }
+    sheet.getRange(dataStartRow, rankCol, ROSTER_MAX_ROWS, 1).setFormulas(rankFormulas);
+    sheet.getRange(dataStartRow, avgRankCol, ROSTER_MAX_ROWS, 1).setNumberFormat("0.0");
+  });
+
+  sheet.setFrozenRows(2);
 }
 
 // ---------------------------------------------------------------------------
