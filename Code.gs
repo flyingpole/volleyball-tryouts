@@ -7,7 +7,7 @@
 // Manage deployments > Edit > New version > Deploy), open the Web app URL
 // directly in a browser with no query string — the JSON response's
 // "version" field should match this, confirming the redeploy actually took.
-const CODE_VERSION = "2026-07-22-header-center";
+const CODE_VERSION = "2026-07-22-blank-zero-attempt-ranks";
 
 const SHEETS = {
   ROSTER: "Roster",
@@ -212,8 +212,18 @@ function buildAggregateSheet(sheet, coachFilter) {
     baseCols[2].push([`=IF(Roster!A${r}="","",Roster!C${r})`]);
     baseCols[3].push([`=IF(Roster!A${r}="","",Roster!D${r})`]);
     SKILLS.forEach((skill, idx) => {
-      const aggFn = skill.agg === "sum" ? "SUMIFS" : "AVERAGEIFS";
-      skillCols[idx].push([`=IF($A${r}="","",IFERROR(${aggFn}(Log!$H:$H,Log!$C:$C,$A${r},Log!$E:$E,"${skill.name}",Log!$J:$J,"<>TRUE"${coachCriteria}),""))`]);
+      // AVERAGEIFS already blanks itself out on zero attempts (it throws
+      // #DIV/0!, caught by IFERROR below). SUMIFS doesn't — a sum-aggregated
+      // skill like Game Play with zero attempts legitimately sums to 0, which
+      // IFERROR can't distinguish from "hasn't been evaluated yet", so those
+      // need an explicit attempt-count check to blank out instead of showing
+      // a real (and rankable) 0.
+      const criteria = `Log!$C:$C,$A${r},Log!$E:$E,"${skill.name}",Log!$J:$J,"<>TRUE"${coachCriteria}`;
+      if (skill.agg === "sum") {
+        skillCols[idx].push([`=IF($A${r}="","",IF(COUNTIFS(${criteria})=0,"",SUMIFS(Log!$H:$H,${criteria})))`]);
+      } else {
+        skillCols[idx].push([`=IF($A${r}="","",IFERROR(AVERAGEIFS(Log!$H:$H,${criteria}),""))`]);
+      }
     });
     if (isSummary) {
       SKILLS.forEach((skill, idx) => {
