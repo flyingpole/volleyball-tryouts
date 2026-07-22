@@ -74,8 +74,9 @@ function selectPlayer(idx) {
 
 function refreshUI() {
   const p = activePlayer();
+  const tally = p ? sessionTallies[p.playerNumber] : null;
   els.activePlayerLabel.textContent = p
-    ? `#${p.playerNumber} ${p.playerName || "(unnamed)"}`
+    ? `#${p.playerNumber} ${p.playerName || "(unnamed)"}${tally ? ` — ${tally.attempts} att` : ""}`
     : (visiblePlayers.length ? "Tap a player" : "Load a group");
 
   const ready = !!p && isScriptConfigured();
@@ -262,7 +263,7 @@ function submitAttempt(result, hitTarget) {
   }
 
   const pts = hitTarget ? 1 : 0;
-  const label = `${result} ${hitTarget ? "Hit" : "Miss"}`;
+  const label = `${result} Set ${hitTarget ? "Hit" : "Miss"}`;
 
   adjustTally(p.playerNumber, 1, pts);
   renderRows();
