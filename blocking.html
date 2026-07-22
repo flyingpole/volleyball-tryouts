@@ -43,7 +43,7 @@
       <button type="button" class="rail-btn rail-undo" id="undoBtn" disabled>UNDO</button>
       <div class="active-player-mini" id="activePlayerLabel">Load a group</div>
 
-      <input type="text" inputmode="decimal" id="timeInput" class="rail-time-input" placeholder="Seconds" aria-label="Circuit time in seconds" />
+      <input type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" id="timeInput" class="rail-time-input" placeholder="Seconds" aria-label="Circuit time in seconds" />
 
       <button type="button" class="toggle rail-btn quality-red" id="btnRed" data-result="Red" disabled>RED<span class="pts">1</span></button>
       <button type="button" class="toggle rail-btn quality-yellow" id="btnYellow" data-result="Yellow" disabled>YELLOW<span class="pts">2</span></button>

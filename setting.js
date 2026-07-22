@@ -10,7 +10,6 @@ let activeIndex = null; // index into visiblePlayers
 let sessionTallies = {}; // playerNumber -> { attempts, points }
 let undoStack = []; // most-recent-first, confirmed (server-acknowledged) attempts only, capped at MAX_UNDO
 let jogSettleTimer = null;
-let seedStart = null; // the start number a rotation began at; where it loops back to at roster's end
 
 function persistState() {
   saveJSON(STATE_KEY, {
@@ -18,7 +17,6 @@ function persistState() {
     activePlayerNumber: activePlayer() ? activePlayer().playerNumber : undefined,
     tallies: sessionTallies,
     undoStack,
-    seedStart,
   });
 }
 
@@ -92,18 +90,15 @@ function setToast(message, isError) {
   els.toast.className = "toast " + (isError ? "error" : "success");
 }
 
-// preferredPlayerNumber: used when restoring a saved session or sliding to a
-// specific player, so that player stays selected instead of defaulting to the
-// first in the group. reseed: true when this is a deliberate new starting
-// point (manual Load, jog wheel) rather than an automatic slide-forward —
-// only deliberate seeds get remembered as the rotation's loop-back point.
-function loadGroup(preferredPlayerNumber, reseed) {
+// preferredPlayerNumber: used when restoring a saved session or jumping to a
+// specific player (via the jog wheel), so that player stays selected instead
+// of defaulting to the first in the group.
+function loadGroup(preferredPlayerNumber) {
   const start = parseInt(els.startNumberInput.value, 10);
   if (!Number.isFinite(start)) {
     setToast("Enter a starting player number.", true);
     return;
   }
-  if (reseed) seedStart = start;
   visiblePlayers = roster
     .filter((p) => {
       const n = Number(p.playerNumber);
@@ -180,33 +175,7 @@ function onJogSettled() {
 // middle, with players above/below shown by their normal numeric sequence.
 function jumpToPlayer(playerNumber) {
   els.startNumberInput.value = String(playerNumber - 4);
-  loadGroup(playerNumber, true);
-}
-
-// Moves to the next player after a score. Within the visible 10, that's just
-// the next row. At the bottom of the 10, instead of wrapping back to the top
-// of the same group, the whole window slides forward one player number —
-// there's no need to keep re-picking a starting point as you work through
-// the roster. If sliding forward would run past the last player on the
-// roster, loop back to wherever this rotation was originally seeded from.
-function advanceAfterScore() {
-  if (!visiblePlayers.length) return;
-  if (activeIndex < visiblePlayers.length - 1) {
-    activeIndex += 1;
-    return;
-  }
-
-  const lastNum = Number(visiblePlayers[visiblePlayers.length - 1].playerNumber);
-  const hasMoreAhead = roster.some((p) => Number(p.playerNumber) > lastNum);
-
-  if (hasMoreAhead) {
-    const start = parseInt(els.startNumberInput.value, 10);
-    els.startNumberInput.value = String((Number.isFinite(start) ? start : lastNum - GROUP_SIZE + 1) + 1);
-    loadGroup(lastNum + 1);
-  } else if (seedStart !== null) {
-    els.startNumberInput.value = String(seedStart);
-    loadGroup();
-  }
+  loadGroup(playerNumber);
 }
 
 async function init() {
@@ -234,9 +203,6 @@ async function init() {
     if (savedState && savedState.tallies) sessionTallies = savedState.tallies;
     if (savedState && Array.isArray(savedState.undoStack)) undoStack = savedState.undoStack;
     if (savedState && savedState.startNumber) {
-      seedStart = Number.isFinite(savedState.seedStart)
-        ? savedState.seedStart
-        : parseInt(savedState.startNumber, 10);
       els.startNumberInput.value = savedState.startNumber;
       loadGroup(savedState.activePlayerNumber);
     }
@@ -250,7 +216,7 @@ els.coachSelect.addEventListener("change", () => {
   saveCoach(els.coachSelect.value);
 });
 
-els.loadGroupBtn.addEventListener("click", () => loadGroup(undefined, true));
+els.loadGroupBtn.addEventListener("click", () => loadGroup());
 els.startNumberInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") loadGroup(undefined, true);
 });
@@ -280,9 +246,12 @@ function pushUndoEntry(entry) {
 }
 
 // Every button IS the score (Hit = 1, Miss = 0), so there's no pending
-// selection step — tapping a button logs immediately. Updates state and the
-// screen right away, confirms with the server in the background, and rolls
-// back only if the server explicitly rejects it (see app.js postJSON).
+// selection step — tapping a button logs immediately. Unlike the other skill
+// pages, the active player does NOT auto-advance: players run several reps
+// in a row here, so the coach stays on the same player until they tap a
+// different row themselves. Updates state and the screen right away,
+// confirms with the server in the background, and rolls back only if the
+// server explicitly rejects it (see app.js postJSON).
 function submitAttempt(result, hitTarget) {
   const p = activePlayer();
   if (!p) return;
@@ -296,7 +265,6 @@ function submitAttempt(result, hitTarget) {
   const label = `${result} ${hitTarget ? "Hit" : "Miss"}`;
 
   adjustTally(p.playerNumber, 1, pts);
-  advanceAfterScore();
   renderRows();
   refreshUI();
   setToast(`✓ #${p.playerNumber} ${p.playerName} — ${label} (saving…)`, false);

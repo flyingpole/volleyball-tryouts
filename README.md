@@ -94,8 +94,10 @@ visually even though their time rank looks good.
 
 ## How the Setting page works
 
-Same player list, jog wheel, coach picker, and Undo. Four buttons — logging
-immediately:
+Same player list, jog wheel, and coach picker as the other pages, but **the
+active player does NOT auto-advance** — setters run several reps in a row, so
+the same player stays selected across taps until you tap a different row
+yourself. Four buttons — logging immediately:
 
 - **Front Hit ✓** / **Front Miss ✗** / **Back Hit ✓** / **Back Miss ✗**.
 
