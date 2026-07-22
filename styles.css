@@ -77,13 +77,30 @@ header.top.compact h1 {
 }
 
 .menu-btn {
-  background: none;
+  position: relative;
+  background: rgba(255, 255, 255, 0.12);
   border: none;
+  border-radius: 6px;
   color: white;
   font-size: 1.3rem;
   line-height: 1;
-  padding: 2px 6px;
+  padding: 4px 10px;
   cursor: pointer;
+}
+
+/* Expands the real tap target well past the visible glyph (to roughly the
+   44px Apple/Android minimum) without growing the header's layout height —
+   an absolutely-positioned pseudo-element is taken out of flow, so it adds
+   no space to the row, but taps anywhere in its box still count as a click
+   on the button itself. Skewed left/up rather than symmetric so it doesn't
+   swallow taps meant for the neighboring "← Skills" link. */
+.menu-btn::after {
+  content: "";
+  position: absolute;
+  top: -14px;
+  right: -4px;
+  bottom: -14px;
+  left: -12px;
 }
 
 .menu-panel {
