@@ -7,7 +7,7 @@
 // Manage deployments > Edit > New version > Deploy), open the Web app URL
 // directly in a browser with no query string — the JSON response's
 // "version" field should match this, confirming the redeploy actually took.
-const CODE_VERSION = "2026-07-21-add-passing";
+const CODE_VERSION = "2026-07-21-pass-sequence";
 
 const SHEETS = {
   ROSTER: "Roster",
@@ -97,15 +97,19 @@ function setupLogSheet(ss) {
 // coachFilter is null (aggregates every coach), or a single coach's tab when
 // coachFilter is that coach's name. Every cell is a plain formula tied to a
 // specific row, so the sheet stays live as the Log tab grows — no script
-// recompute needed. Columns: Player #, Name, Positions, Grade, then one
-// avg-score column per skill in SKILLS.
+// recompute needed. Columns: Player #, Name, Positions, Grade, one avg-score
+// column per skill in SKILLS, then a Pass Sequence column — each pass grade
+// in the order it happened (e.g. "013233110032311121"), a quick visual read
+// on whether a player is trending up or down over the tryout.
 function buildAggregateSheet(sheet, coachFilter) {
   sheet.clear();
   // This is a computed, read-only view — any data validation left over on it
   // (e.g. copied from Roster's Positions dropdown) would reject formula
   // results that don't happen to match that list, like "" for a blank row.
   sheet.getRange(1, 1, ROSTER_MAX_ROWS + 5, 12).clearDataValidations();
-  const headers = ["Player #", "Name", "Positions", "Grade"].concat(SKILLS.map((s) => s.name));
+  const headers = ["Player #", "Name", "Positions", "Grade"]
+    .concat(SKILLS.map((s) => s.name))
+    .concat(["Pass Sequence"]);
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold");
   sheet.setFrozenRows(1);
 
@@ -113,9 +117,13 @@ function buildAggregateSheet(sheet, coachFilter) {
   const coachCriteria = coachFilter
     ? `,Log!$B:$B,"${coachFilter.replace(/"/g, '""')}"`
     : "";
+  const coachQueryClause = coachFilter
+    ? ` and B='${coachFilter.replace(/'/g, "\\'")}'`
+    : "";
 
   const baseCols = [[], [], [], []]; // Player #, Name, Positions, Grade
   const skillCols = SKILLS.map(() => []);
+  const passSeqCol = [];
 
   for (let i = 0; i < ROSTER_MAX_ROWS; i++) {
     const r = startRow + i;
@@ -126,6 +134,7 @@ function buildAggregateSheet(sheet, coachFilter) {
     SKILLS.forEach((skill, idx) => {
       skillCols[idx].push([`=IF($A${r}="","",IFERROR(AVERAGEIFS(Log!$H:$H,Log!$C:$C,$A${r},Log!$E:$E,"${skill.name}",Log!$I:$I,"<>TRUE"${coachCriteria}),""))`]);
     });
+    passSeqCol.push([`=IF($A${r}="","",IFERROR(JOIN("",QUERY(Log!$A:$I,"select H where C='"&$A${r}&"' and E='Passing' and I!=true${coachQueryClause} order by A asc",0)),""))`]);
   }
 
   baseCols.forEach((col, idx) => {
@@ -134,6 +143,7 @@ function buildAggregateSheet(sheet, coachFilter) {
   skillCols.forEach((col, idx) => {
     sheet.getRange(startRow, 5 + idx, ROSTER_MAX_ROWS, 1).setFormulas(col);
   });
+  sheet.getRange(startRow, 5 + SKILLS.length, ROSTER_MAX_ROWS, 1).setFormulas(passSeqCol);
 }
 
 // Builds a ranking/triage sheet for one skill: sorted by that skill's avg
