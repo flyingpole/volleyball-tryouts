@@ -493,7 +493,12 @@ select {
 .evaluator-app .toast {
   margin: 0 12px;
   padding: 3px;
-  min-height: 0.9em;
+  /* A real toast message (showing almost the entire time a coach is
+     actively scoring) renders taller than an empty one — budget for that
+     populated size up front (see .score-rail's gap below, trimmed to make
+     room) rather than having the page grow the moment the first message
+     appears. */
+  min-height: 22px;
   font-size: 0.75rem;
 }
 
@@ -592,7 +597,12 @@ select {
 .score-rail {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  /* .evaluator-grid's align-items:start sizes this column purely to its own
+     content (not stretched to match col-players), so it's the actual
+     no-scroll bottleneck on pages with several two-line buttons (Serving's
+     velocity buttons especially). Trimmed from 4px to reclaim the space the
+     toast's corrected min-height above needs. */
+  gap: 2px;
   min-height: 0;
 }
 
