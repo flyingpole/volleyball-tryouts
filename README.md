@@ -31,6 +31,18 @@ Without it, a leftover undo entry from testing could reference a Log row
 number that, after the Sheet is cleared, holds a real tryout attempt instead
 — tapping UNDO would then soft-delete the wrong row.
 
+## The "Find player" jog wheel (Serving, Passing, Attacking, Blocking, Setting)
+
+This scrollable list always keeps itself centered on the active player,
+rather than sitting wherever it was last left. Without that, jumping from
+player #1 (where the wheel happened to be) to the active player #28 meant
+scrolling through the whole roster — only 2-3 names visible at a time — just
+to get back to somewhere useful. Now it re-centers automatically whenever the
+active player changes: tapping a row, loading a new group, or auto-advancing
+after a score. You can still scroll it yourself at any time to jump to a
+different player; it only takes over right after *you* aren't the one moving
+it.
+
 ## How the Serving page works
 
 1. Type the player number you're starting with (e.g. `11`) and tap **Load**.

@@ -10,6 +10,7 @@ let activeIndex = null; // index into visiblePlayers
 let sessionTallies = {}; // playerNumber -> { attempts, points }
 let undoStack = []; // most-recent-first, confirmed (server-acknowledged) attempts only, capped at MAX_UNDO
 let jogSettleTimer = null;
+let suppressJogSettle = false; // true while we're programmatically scrolling the jog wheel, so that scroll doesn't get misread as the user hunting for a player
 
 function persistState() {
   saveJSON(STATE_KEY, {
@@ -70,6 +71,7 @@ function selectPlayer(idx) {
   renderRows();
   refreshUI();
   persistState();
+  if (activePlayer()) scrollJogToPlayer(activePlayer().playerNumber);
 }
 
 function refreshUI() {
@@ -93,8 +95,10 @@ function setToast(message, isError) {
 
 // preferredPlayerNumber: used when restoring a saved session or jumping to a
 // specific player (via the jog wheel), so that player stays selected instead
-// of defaulting to the first in the group.
-function loadGroup(preferredPlayerNumber) {
+// of defaulting to the first in the group. skipJogCenter: true when this load
+// was itself triggered by the jog wheel settling on a player — no need to
+// re-center it on itself.
+function loadGroup(preferredPlayerNumber, skipJogCenter) {
   const start = parseInt(els.startNumberInput.value, 10);
   if (!Number.isFinite(start)) {
     setToast("Enter a starting player number.", true);
@@ -116,6 +120,7 @@ function loadGroup(preferredPlayerNumber) {
   renderRows();
   refreshUI();
   persistState();
+  if (!skipJogCenter && activePlayer()) scrollJogToPlayer(activePlayer().playerNumber);
 
   if (!visiblePlayers.length) {
     setToast(`No roster players found from #${start} to #${start + GROUP_SIZE - 1}.`, true);
@@ -152,6 +157,7 @@ function renderPlayerJog() {
 }
 
 els.playerJog.addEventListener("scroll", () => {
+  if (suppressJogSettle) return;
   clearTimeout(jogSettleTimer);
   jogSettleTimer = setTimeout(onJogSettled, 120);
 });
@@ -176,7 +182,27 @@ function onJogSettled() {
 // middle, with players above/below shown by their normal numeric sequence.
 function jumpToPlayer(playerNumber) {
   els.startNumberInput.value = String(playerNumber - 4);
-  loadGroup(playerNumber);
+  loadGroup(playerNumber, true);
+}
+
+// Keeps the jog wheel following whichever player is active, so it's always
+// close by rather than wherever it was last left — without this, going from
+// player #1 (where the wheel happens to be) to #28 (the active player) meant
+// scrolling through the whole roster to get back nearby. Suppresses the
+// wheel's own scroll-settle detection for the single scroll event this
+// triggers, so it doesn't fight with (or get mistaken for) the user
+// manually scrolling it.
+function scrollJogToPlayer(playerNumber) {
+  const jog = els.playerJog;
+  const item = [...jog.querySelectorAll(".player-jog-item")].find(
+    (el) => String(el.dataset.playerNumber) === String(playerNumber)
+  );
+  if (!item) return;
+  const target = item.offsetTop + item.offsetHeight / 2 - jog.clientHeight / 2;
+  suppressJogSettle = true;
+  jog.scrollTo({ top: target, behavior: "auto" });
+  clearTimeout(jogSettleTimer);
+  setTimeout(() => { suppressJogSettle = false; }, 200);
 }
 
 async function init() {
@@ -237,7 +263,7 @@ function resetPageState() {
 
 els.loadGroupBtn.addEventListener("click", () => loadGroup());
 els.startNumberInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") loadGroup(undefined, true);
+  if (e.key === "Enter") loadGroup();
 });
 
 scoreButtons.forEach((btn) => {
