@@ -152,6 +152,15 @@ tune these in `Code.gs` (`FLAG_MIN_ATTEMPTS`, `FLAG_MIN_COACHES`,
 `FLAG_SCORE_GAP`). `Passing Rankings` additionally breaks ties by 0-Pass %
 (lower is better) via the hidden `Passing Data` helper tab.
 
+`Position Rankings` shows five ranked lists side by side, one per position
+(`POSITION_FILTER_OPTIONS` in `Code.gs` — currently OH, RS, MB, Def, S),
+sorted by Summary Sheet's Avg Rank ascending — the cross-skill composite, not
+any single skill. Scan across the row to see the best available player at
+each position. Position matching everywhere in the app checks for an exact,
+comma-separated code (so filtering by "S" won't also match "RS") — if you use
+different position codes, editing `POSITION_FILTER_OPTIONS` updates every
+rankings tab's filter dropdown and Position Rankings' columns together.
+
 ## Adding a new skill later
 
 1. Decide that skill's button set and point values, then add a
