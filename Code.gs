@@ -7,7 +7,7 @@
 // Manage deployments > Edit > New version > Deploy), open the Web app URL
 // directly in a browser with no query string — the JSON response's
 // "version" field should match this, confirming the redeploy actually took.
-const CODE_VERSION = "2026-07-22-blank-zero-attempt-ranks";
+const CODE_VERSION = "2026-07-22-fix-descending-sort-blanks";
 
 const SHEETS = {
   ROSTER: "Roster",
@@ -283,9 +283,14 @@ function buildSkillRankingsSheet(sheet, skillName, summaryColLetter, sequenceOpt
   // args must each be a full boolean array, not a scalar, so the "All"
   // branch reuses the has-a-player array instead of a bare TRUE.
   const hasPlayer = `'${SHEETS.SUMMARY}'!$A$2:$A$${lastRow}<>""`;
+  // Excludes players with no score in this skill entirely, rather than
+  // showing them with a blank cell — SORT's descending order flips blank/
+  // text cells to the FRONT (the reverse of ascending, where they'd trail),
+  // so leaving them in would bury real scores below a wall of blanks.
+  const hasScore = `'${SHEETS.SUMMARY}'!$${summaryColLetter}$2:$${summaryColLetter}$${lastRow}<>""`;
   const positionMatch = positionMatchFormula(`'${SHEETS.SUMMARY}'!$C$2:$C$${lastRow}`, "$B$1");
   sheet.getRange("B4").setFormula(
-    `=IFERROR(SORT(FILTER({'${SHEETS.SUMMARY}'!$A$2:$D$${lastRow},'${SHEETS.SUMMARY}'!$${summaryColLetter}$2:$${summaryColLetter}$${lastRow}}, ${hasPlayer}, IF($B$1="All", ${hasPlayer}, ${positionMatch})), 5, FALSE), "")`
+    `=IFERROR(SORT(FILTER({'${SHEETS.SUMMARY}'!$A$2:$D$${lastRow},'${SHEETS.SUMMARY}'!$${summaryColLetter}$2:$${summaryColLetter}$${lastRow}}, ${hasPlayer}, ${hasScore}, IF($B$1="All", ${hasPlayer}, ${positionMatch})), 5, FALSE), "")`
   );
 
   const colA = [], colG = [], colH = [], colI = [], colSeq = [];
@@ -364,9 +369,13 @@ function buildTieBreakRankingsSheet(sheet, skillName, dataSheetName, zeroRateLab
   // each be a full boolean array, not a scalar — so the "All" branch reuses
   // the has-a-player array instead of a bare TRUE, which FILTER would reject.
   const hasPlayer = `'${dataSheetName}'!A2:A${lastRow}<>""`;
+  // Same reasoning as buildSkillRankingsSheet — exclude players with no
+  // score (col E, Avg) rather than let SORT's descending order flip their
+  // blank cells to the front.
+  const hasScore = `'${dataSheetName}'!E2:E${lastRow}<>""`;
   const positionMatch = positionMatchFormula(`'${dataSheetName}'!C2:C${lastRow}`, "$B$1");
   sheet.getRange("B4").setFormula(
-    `=IFERROR(SORT(FILTER('${dataSheetName}'!A2:H${lastRow}, ${hasPlayer}, IF($B$1="All", ${hasPlayer}, ${positionMatch})), 5, FALSE, 8, TRUE), "")`
+    `=IFERROR(SORT(FILTER('${dataSheetName}'!A2:H${lastRow}, ${hasPlayer}, ${hasScore}, IF($B$1="All", ${hasPlayer}, ${positionMatch})), 5, FALSE, 8, TRUE), "")`
   );
 
   // Spilled columns land at B..I: Player#, Name, Positions, Grade, Avg,
@@ -487,9 +496,14 @@ function buildSettingRankingsSheet(sheet, summaryColLetter) {
 
   const lastRow = 1 + ROSTER_MAX_ROWS;
   const hasPlayer = `'${SHEETS.SUMMARY}'!$A$2:$A$${lastRow}<>""`;
+  // Excludes players with no score in this skill entirely, rather than
+  // showing them with a blank cell — SORT's descending order flips blank/
+  // text cells to the FRONT (the reverse of ascending, where they'd trail),
+  // so leaving them in would bury real scores below a wall of blanks.
+  const hasScore = `'${SHEETS.SUMMARY}'!$${summaryColLetter}$2:$${summaryColLetter}$${lastRow}<>""`;
   const positionMatch = positionMatchFormula(`'${SHEETS.SUMMARY}'!$C$2:$C$${lastRow}`, "$B$1");
   sheet.getRange("B4").setFormula(
-    `=IFERROR(SORT(FILTER({'${SHEETS.SUMMARY}'!$A$2:$D$${lastRow},'${SHEETS.SUMMARY}'!$${summaryColLetter}$2:$${summaryColLetter}$${lastRow}}, ${hasPlayer}, IF($B$1="All", ${hasPlayer}, ${positionMatch})), 5, FALSE), "")`
+    `=IFERROR(SORT(FILTER({'${SHEETS.SUMMARY}'!$A$2:$D$${lastRow},'${SHEETS.SUMMARY}'!$${summaryColLetter}$2:$${summaryColLetter}$${lastRow}}, ${hasPlayer}, ${hasScore}, IF($B$1="All", ${hasPlayer}, ${positionMatch})), 5, FALSE), "")`
   );
 
   const colA = [], colG = [], colH = [], colI = [], colJ = [], colK = [];
@@ -534,9 +548,14 @@ function buildGamePlayRankingsSheet(sheet, summaryColLetter) {
 
   const lastRow = 1 + ROSTER_MAX_ROWS;
   const hasPlayer = `'${SHEETS.SUMMARY}'!$A$2:$A$${lastRow}<>""`;
+  // Excludes players with no score in this skill entirely, rather than
+  // showing them with a blank cell — SORT's descending order flips blank/
+  // text cells to the FRONT (the reverse of ascending, where they'd trail),
+  // so leaving them in would bury real scores below a wall of blanks.
+  const hasScore = `'${SHEETS.SUMMARY}'!$${summaryColLetter}$2:$${summaryColLetter}$${lastRow}<>""`;
   const positionMatch = positionMatchFormula(`'${SHEETS.SUMMARY}'!$C$2:$C$${lastRow}`, "$B$1");
   sheet.getRange("B4").setFormula(
-    `=IFERROR(SORT(FILTER({'${SHEETS.SUMMARY}'!$A$2:$D$${lastRow},'${SHEETS.SUMMARY}'!$${summaryColLetter}$2:$${summaryColLetter}$${lastRow}}, ${hasPlayer}, IF($B$1="All", ${hasPlayer}, ${positionMatch})), 5, FALSE), "")`
+    `=IFERROR(SORT(FILTER({'${SHEETS.SUMMARY}'!$A$2:$D$${lastRow},'${SHEETS.SUMMARY}'!$${summaryColLetter}$2:$${summaryColLetter}$${lastRow}}, ${hasPlayer}, ${hasScore}, IF($B$1="All", ${hasPlayer}, ${positionMatch})), 5, FALSE), "")`
   );
 
   const lastLogRow = LOG_MAX_ROWS + 1;
