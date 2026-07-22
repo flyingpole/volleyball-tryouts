@@ -43,9 +43,10 @@ number that, after the Sheet is cleared, holds a real tryout attempt instead
 ### Scoring
 
 There's no separate "log" step — tapping an outcome logs the attempt
-immediately and auto-advances to the *next* player in the group (players
-serve in numerical order; tap a different row any time to override, e.g. a
-player skipped this rotation):
+immediately. **The active player does NOT auto-advance** — servers take
+several reps in a row, so the coach stays on the same player (their
+running attempt count shows right in the label) until tapping a different
+row themselves:
 
 - **Missed** — logs instantly, 0 points (still counted as an attempt).
 - Tap a velocity — **Slow** (&lt;30 mph, 1pt), **Average** (30-35 mph, 2pt), or
@@ -149,7 +150,11 @@ and both columns still end at the same bottom edge instead of one trailing
 off with blank space.
 
 Coach picker and Undo work the same as every other page. Nine scoring
-buttons, grouped into five play types, each logging immediately:
+buttons, grouped into five play types, each logging immediately — sized to
+fill all of the scoring rail's height (always at least as tall as an
+on-court column's buttons when a side is maxed out at 12, usually taller,
+since there are only 9 of them) so they're comfortable to hit with a thumb
+mid-play:
 
 - **Serve**: Service Ace (+1) / Serve Error (-1)
 - **Serve Receive**: Serve Receive (+1) / Serve Receive Error (-1)

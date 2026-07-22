@@ -593,6 +593,7 @@ select {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-height: 0;
 }
 
 .active-player-mini {
@@ -812,20 +813,30 @@ select {
   cursor: not-allowed;
 }
 
+/* Stretches to fill all of score-rail's leftover height (same technique as
+   .court-columns) instead of sizing to content — with a fixed 5-row grid
+   (9 buttons always, never fewer), this makes each button at least as tall
+   as a court-row is when a side is maxed out at 12 players, usually taller,
+   since 5 divisions of the same space is more generous than 12. Big enough
+   to hit reliably with a thumb mid-play. */
 .gp-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  grid-template-rows: repeat(5, 1fr);
   gap: 4px;
+  flex: 1;
+  min-height: 0;
 }
 
 .gp-grid .rail-btn {
-  min-height: 40px;
+  height: 100%;
+  min-height: 0;
   padding: 3px 3px;
-  font-size: 0.65rem;
+  font-size: 0.85rem;
 }
 
 .gp-grid .rail-btn .pts {
-  font-size: 0.58rem;
+  font-size: 0.7rem;
 }
 
 .gp-wide {
