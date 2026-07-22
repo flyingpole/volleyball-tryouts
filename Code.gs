@@ -7,7 +7,7 @@
 // Manage deployments > Edit > New version > Deploy), open the Web app URL
 // directly in a browser with no query string — the JSON response's
 // "version" field should match this, confirming the redeploy actually took.
-const CODE_VERSION = "2026-07-22-header-wrap";
+const CODE_VERSION = "2026-07-22-header-center";
 
 const SHEETS = {
   ROSTER: "Roster",
@@ -120,7 +120,7 @@ function setupRosterSheet(ss) {
   const sheet = getOrCreateSheet(ss, SHEETS.ROSTER);
   if (sheet.getRange(1, 1).getValue() !== "") return; // don't clobber existing roster data
   const headers = ["Player #", "Name", "Positions", "Grade"];
-  sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setWrap(true);
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setWrap(true).setHorizontalAlignment("center");
   sheet.setFrozenRows(1);
 }
 
@@ -135,7 +135,7 @@ function setupLogSheet(ss) {
     "Timestamp", "Coach", "Player #", "Player Name", "Skill",
     "Result", "Hit Target", "Points", "Value 2", "Deleted",
   ];
-  sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setWrap(true);
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setWrap(true).setHorizontalAlignment("center");
   sheet.setFrozenRows(1);
 }
 
@@ -186,7 +186,7 @@ function buildAggregateSheet(sheet, coachFilter) {
     headers.push(...SKILLS.map((s) => `${s.name} Rank`));
     headers.push("Avg Rank", "Overall Rank");
   }
-  sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setWrap(true);
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setWrap(true).setHorizontalAlignment("center");
   sheet.setFrozenRows(1);
 
   const startRow = 2;
@@ -264,7 +264,7 @@ function buildSkillRankingsSheet(sheet, skillName, summaryColLetter, sequenceOpt
 
   const headers = ["Rank", "Player #", "Name", "Positions", "Grade", `${skillName} Avg`, "Attempts", "Coaches", "Flag"];
   if (sequenceOptions) headers.push(sequenceOptions.label || "Sequence");
-  sheet.getRange(3, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setWrap(true);
+  sheet.getRange(3, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setWrap(true).setHorizontalAlignment("center");
   sheet.setFrozenRows(3);
 
   const lastRow = 1 + ROSTER_MAX_ROWS;
@@ -305,7 +305,7 @@ function buildSkillDataSheet(sheet, skillName, summaryColLetter, zeroResultValue
   sheet.clear();
   sheet.getRange(1, 1, ROSTER_MAX_ROWS + 5, 12).clearDataValidations();
   const headers = ["Player #", "Name", "Positions", "Grade", "Avg", "Attempts", "Coaches", "Zero Rate"];
-  sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setWrap(true);
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setWrap(true).setHorizontalAlignment("center");
   sheet.setFrozenRows(1);
 
   const startRow = 2;
@@ -345,7 +345,7 @@ function buildTieBreakRankingsSheet(sheet, skillName, dataSheetName, zeroRateLab
   sheet.getRange("B1").setDataValidation(rule);
 
   const headers = ["Rank", "Player #", "Name", "Positions", "Grade", `${skillName} Avg`, "Attempts", "Coaches", zeroRateLabel, "Flag", "Sequence"];
-  sheet.getRange(3, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setWrap(true);
+  sheet.getRange(3, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setWrap(true).setHorizontalAlignment("center");
   sheet.setFrozenRows(3);
 
   const lastRow = 1 + ROSTER_MAX_ROWS;
@@ -384,7 +384,7 @@ function buildBlockingDataSheet(sheet) {
   sheet.clear();
   sheet.getRange(1, 1, ROSTER_MAX_ROWS + 5, 12).clearDataValidations();
   const headers = ["Player #", "Name", "Positions", "Grade", "Best Time", "Worst Time", "Avg Time", "Avg Quality", "Attempts", "Coaches"];
-  sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setWrap(true);
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setWrap(true).setHorizontalAlignment("center");
   sheet.setFrozenRows(1);
 
   const startRow = 2;
@@ -423,7 +423,7 @@ function buildBlockingRankingsSheet(sheet, dataSheetName) {
   sheet.getRange("B1").setDataValidation(rule);
 
   const headers = ["Rank", "Player #", "Name", "Positions", "Grade", "Best Time", "Worst Time", "Avg Time", "Avg Quality", "Attempts", "Coaches", "Flag"];
-  sheet.getRange(3, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setWrap(true);
+  sheet.getRange(3, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setWrap(true).setHorizontalAlignment("center");
   sheet.setFrozenRows(3);
 
   const lastRow = 1 + ROSTER_MAX_ROWS;
@@ -472,7 +472,7 @@ function buildSettingRankingsSheet(sheet, summaryColLetter) {
   sheet.getRange("B1").setDataValidation(rule);
 
   const headers = ["Rank", "Player #", "Name", "Positions", "Grade", "Overall %", "Front %", "Back %", "Attempts", "Coaches", "Flag"];
-  sheet.getRange(3, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setWrap(true);
+  sheet.getRange(3, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setWrap(true).setHorizontalAlignment("center");
   sheet.setFrozenRows(3);
 
   const lastRow = 1 + ROSTER_MAX_ROWS;
@@ -519,7 +519,7 @@ function buildGamePlayRankingsSheet(sheet, summaryColLetter) {
   sheet.getRange("B1").setDataValidation(rule);
 
   const headers = ["Rank", "Player #", "Name", "Positions", "Grade", "Total", "Attempts", "Coaches", "Flag"].concat(GAME_PLAY_CATEGORIES);
-  sheet.getRange(3, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setWrap(true);
+  sheet.getRange(3, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setWrap(true).setHorizontalAlignment("center");
   sheet.setFrozenRows(3);
 
   const lastRow = 1 + ROSTER_MAX_ROWS;
@@ -584,7 +584,7 @@ function buildPositionRankingsSheet(sheet) {
       .setValue(pos).setFontWeight("bold").setHorizontalAlignment("center")
       .setBackground("#0b2545").setFontColor("#ffffff");
     sheet.getRange(2, groupStart, 1, groupWidth)
-      .setValues([["Rank", "Player #", "Name", "Avg Rank"]]).setFontWeight("bold").setWrap(true);
+      .setValues([["Rank", "Player #", "Name", "Avg Rank"]]).setFontWeight("bold").setWrap(true).setHorizontalAlignment("center");
 
     const escapedPos = `"${pos.replace(/"/g, '""')}"`;
     const positionMatch = positionMatchFormula(`'${SHEETS.SUMMARY}'!$C$2:$C$${lastRow}`, escapedPos);
