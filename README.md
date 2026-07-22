@@ -57,7 +57,9 @@ A player's Passing score is the *average* of all their pass grades (e.g.
 0, 3, 1 averages to 1.33) — computed server-side the same way as every other
 skill. `Passing Rankings` also tracks **0-Pass %** (their share of passes
 graded 0) and uses it as a tie-breaker: among players with an equal average,
-the one with the lower 0-Pass % ranks higher.
+the one with the lower 0-Pass % ranks higher. Its **Sequence** column shows
+every grade a player got, in the order it happened (e.g. `013233110032311121`)
+— a quick visual read on whether they're trending up or down.
 
 ## One-time setup
 
@@ -103,11 +105,17 @@ before or during tryouts. If a coach evaluates a player number that isn't
 listed yet, the app adds a bare row for them automatically — no attempt is
 lost, though Positions/Grade will be blank until you fill them in.
 
-`Summary Sheet` and every coach's tab mirror the same columns — Player #,
-Name, Positions, Grade, then one average-score column per skill (Serving,
-Passing, Attacking Pin, Attacking MB, Blocking). Serving and Passing have a
-scoring UI so far; the other skill columns will just stay blank until those
-pages exist.
+Every coach's tab has: Player #, Name, Positions, Grade, then one average-score
+column per skill (Serving, Passing, Attacking Pin, Attacking MB, Blocking).
+Serving and Passing have a scoring UI so far; the other skill columns will
+just stay blank until those pages exist.
+
+`Summary Sheet` has those same columns (combining every coach), plus a **Rank**
+next to each skill average (1 = best), and two summary columns at the end:
+**Avg Rank** (the mean of whichever skill ranks a player actually has — a
+skill they haven't been evaluated in doesn't drag it down) and **Overall
+Rank**, sorting players by that Avg Rank ascending. That's the single number
+for "who's the best all-around player so far."
 
 ### 5. Deploy the Web App
 1. In the Apps Script editor, click **Deploy → New deployment**.

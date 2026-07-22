@@ -7,7 +7,7 @@
 // Manage deployments > Edit > New version > Deploy), open the Web app URL
 // directly in a browser with no query string — the JSON response's
 // "version" field should match this, confirming the redeploy actually took.
-const CODE_VERSION = "2026-07-21-pass-sequence";
+const CODE_VERSION = "2026-07-21-summary-ranks";
 
 const SHEETS = {
   ROSTER: "Roster",
@@ -93,37 +93,61 @@ function setupLogSheet(ss) {
   sheet.setFrozenRows(1);
 }
 
+// Converts a 1-based column index to its spreadsheet letter (1 -> A, 27 -> AA).
+function columnLetter(index) {
+  let letter = "";
+  while (index > 0) {
+    const rem = (index - 1) % 26;
+    letter = String.fromCharCode(65 + rem) + letter;
+    index = Math.floor((index - 1) / 26);
+  }
+  return letter;
+}
+
 // Builds (or rebuilds) a per-player summary sheet: the Summary Sheet when
 // coachFilter is null (aggregates every coach), or a single coach's tab when
 // coachFilter is that coach's name. Every cell is a plain formula tied to a
 // specific row, so the sheet stays live as the Log tab grows — no script
-// recompute needed. Columns: Player #, Name, Positions, Grade, one avg-score
-// column per skill in SKILLS, then a Pass Sequence column — each pass grade
-// in the order it happened (e.g. "013233110032311121"), a quick visual read
-// on whether a player is trending up or down over the tryout.
+// recompute needed. Columns: Player #, Name, Positions, Grade, then one
+// avg-score column per skill in SKILLS (E-I — kept in this fixed spot so
+// buildSkillDataSheet's summaryColLetter references keep working).
+//
+// The Summary Sheet ONLY (not coach tabs) gets extra columns appended after
+// that: one Rank per skill (1 = best/highest average), an Avg Rank (the mean
+// of whichever skill ranks a player actually has — skills they haven't been
+// evaluated in don't drag it down), and an Overall Rank from sorting players
+// by that Avg Rank ascending (lower is better, since rank 1 is best).
 function buildAggregateSheet(sheet, coachFilter) {
   sheet.clear();
   // This is a computed, read-only view — any data validation left over on it
   // (e.g. copied from Roster's Positions dropdown) would reject formula
   // results that don't happen to match that list, like "" for a blank row.
-  sheet.getRange(1, 1, ROSTER_MAX_ROWS + 5, 12).clearDataValidations();
-  const headers = ["Player #", "Name", "Positions", "Grade"]
-    .concat(SKILLS.map((s) => s.name))
-    .concat(["Pass Sequence"]);
+  sheet.getRange(1, 1, ROSTER_MAX_ROWS + 5, 20).clearDataValidations();
+
+  const isSummary = coachFilter === null;
+  const headers = ["Player #", "Name", "Positions", "Grade"].concat(SKILLS.map((s) => `${s.name} Avg`));
+  if (isSummary) {
+    headers.push(...SKILLS.map((s) => `${s.name} Rank`));
+    headers.push("Avg Rank", "Overall Rank");
+  }
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold");
   sheet.setFrozenRows(1);
 
   const startRow = 2;
+  const lastDataRow = startRow + ROSTER_MAX_ROWS - 1;
   const coachCriteria = coachFilter
     ? `,Log!$B:$B,"${coachFilter.replace(/"/g, '""')}"`
-    : "";
-  const coachQueryClause = coachFilter
-    ? ` and B='${coachFilter.replace(/'/g, "\\'")}'`
     : "";
 
   const baseCols = [[], [], [], []]; // Player #, Name, Positions, Grade
   const skillCols = SKILLS.map(() => []);
-  const passSeqCol = [];
+  const rankCols = SKILLS.map(() => []);
+  const avgRankCol = [];
+  const overallRankCol = [];
+
+  const rankStartCol = 5 + SKILLS.length; // first Rank column (J)
+  const avgRankColIdx = 5 + SKILLS.length * 2; // O
+  const avgRankLetter = columnLetter(avgRankColIdx);
 
   for (let i = 0; i < ROSTER_MAX_ROWS; i++) {
     const r = startRow + i;
@@ -134,7 +158,16 @@ function buildAggregateSheet(sheet, coachFilter) {
     SKILLS.forEach((skill, idx) => {
       skillCols[idx].push([`=IF($A${r}="","",IFERROR(AVERAGEIFS(Log!$H:$H,Log!$C:$C,$A${r},Log!$E:$E,"${skill.name}",Log!$I:$I,"<>TRUE"${coachCriteria}),""))`]);
     });
-    passSeqCol.push([`=IF($A${r}="","",IFERROR(JOIN("",QUERY(Log!$A:$I,"select H where C='"&$A${r}&"' and E='Passing' and I!=true${coachQueryClause} order by A asc",0)),""))`]);
+    if (isSummary) {
+      SKILLS.forEach((skill, idx) => {
+        const avgLetter = columnLetter(5 + idx);
+        rankCols[idx].push([`=IF(${avgLetter}${r}="","",RANK(${avgLetter}${r},$${avgLetter}$${startRow}:$${avgLetter}$${lastDataRow}))`]);
+      });
+      const firstRankLetter = columnLetter(rankStartCol);
+      const lastRankLetter = columnLetter(rankStartCol + SKILLS.length - 1);
+      avgRankCol.push([`=IF($A${r}="","",IFERROR(AVERAGE(${firstRankLetter}${r}:${lastRankLetter}${r}),""))`]);
+      overallRankCol.push([`=IF(${avgRankLetter}${r}="","",RANK(${avgRankLetter}${r},$${avgRankLetter}$${startRow}:$${avgRankLetter}$${lastDataRow},TRUE))`]);
+    }
   }
 
   baseCols.forEach((col, idx) => {
@@ -143,7 +176,13 @@ function buildAggregateSheet(sheet, coachFilter) {
   skillCols.forEach((col, idx) => {
     sheet.getRange(startRow, 5 + idx, ROSTER_MAX_ROWS, 1).setFormulas(col);
   });
-  sheet.getRange(startRow, 5 + SKILLS.length, ROSTER_MAX_ROWS, 1).setFormulas(passSeqCol);
+  if (isSummary) {
+    rankCols.forEach((col, idx) => {
+      sheet.getRange(startRow, rankStartCol + idx, ROSTER_MAX_ROWS, 1).setFormulas(col);
+    });
+    sheet.getRange(startRow, avgRankColIdx, ROSTER_MAX_ROWS, 1).setFormulas(avgRankCol);
+    sheet.getRange(startRow, avgRankColIdx + 1, ROSTER_MAX_ROWS, 1).setFormulas(overallRankCol);
+  }
 }
 
 // Builds a ranking/triage sheet for one skill: sorted by that skill's avg
@@ -234,7 +273,7 @@ function buildTieBreakRankingsSheet(sheet, skillName, dataSheetName, zeroRateLab
     .build();
   sheet.getRange("B1").setDataValidation(rule);
 
-  const headers = ["Rank", "Player #", "Name", "Positions", "Grade", `${skillName} Avg`, "Attempts", "Coaches", zeroRateLabel, "Flag"];
+  const headers = ["Rank", "Player #", "Name", "Positions", "Grade", `${skillName} Avg`, "Attempts", "Coaches", zeroRateLabel, "Flag", "Sequence"];
   sheet.getRange(3, 1, 1, headers.length).setValues([headers]).setFontWeight("bold");
   sheet.setFrozenRows(3);
 
@@ -248,15 +287,19 @@ function buildTieBreakRankingsSheet(sheet, skillName, dataSheetName, zeroRateLab
   );
 
   // Spilled columns land at B..I: Player#, Name, Positions, Grade, Avg,
-  // Attempts, Coaches, ZeroRate.
-  const colA = [], colJ = [];
+  // Attempts, Coaches, ZeroRate. K (Sequence) shows every grade this player
+  // got, in the order it happened (e.g. "013233110032311121") — a quick
+  // visual read on whether they're trending up or down over the tryout.
+  const colA = [], colJ = [], colK = [];
   for (let i = 0; i < ROSTER_MAX_ROWS; i++) {
     const r = 4 + i;
     colA.push([`=IF(B${r}="","",ROW()-3)`]);
     colJ.push([`=IF(B${r}="","",IFERROR(IF(OR(G${r}<${FLAG_MIN_ATTEMPTS},H${r}<${FLAG_MIN_COACHES},ABS(F${r}-F${r + 1})<${FLAG_SCORE_GAP}),"⚠ Needs more looks",""),""))`]);
+    colK.push([`=IF(B${r}="","",IFERROR(JOIN("",QUERY(Log!$A:$I,"select H where C='"&B${r}&"' and E='${skillName}' and I!=true order by A asc",0)),""))`]);
   }
   sheet.getRange(4, 1, ROSTER_MAX_ROWS, 1).setFormulas(colA);
   sheet.getRange(4, 10, ROSTER_MAX_ROWS, 1).setFormulas(colJ);
+  sheet.getRange(4, 11, ROSTER_MAX_ROWS, 1).setFormulas(colK);
   sheet.getRange(4, 9, ROSTER_MAX_ROWS, 1).setNumberFormat("0.0%");
 }
 
