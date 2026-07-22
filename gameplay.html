@@ -43,8 +43,17 @@
       <button type="button" class="rail-btn rail-undo" id="undoBtn" disabled>UNDO</button>
       <div class="active-player-mini" id="activePlayerLabel">Load a group</div>
 
-      <button type="button" class="toggle rail-btn gp-plus" id="btnPlus" data-result="+">+1<span class="pts">point won</span></button>
-      <button type="button" class="toggle rail-btn gp-minus" id="btnMinus" data-result="-">−1<span class="pts">mistake</span></button>
+      <div class="gp-grid">
+        <button type="button" class="toggle rail-btn gp-plus" data-result="Service Ace">ACE<span class="pts">+1</span></button>
+        <button type="button" class="toggle rail-btn gp-minus" data-result="Serve Error">SERVE ERR<span class="pts">−1</span></button>
+        <button type="button" class="toggle rail-btn gp-plus" data-result="Serve Receive">RECEIVE<span class="pts">+1</span></button>
+        <button type="button" class="toggle rail-btn gp-minus" data-result="Serve Receive Error">RCV ERR<span class="pts">−1</span></button>
+        <button type="button" class="toggle rail-btn gp-plus" data-result="Attack Kill">KILL<span class="pts">+1</span></button>
+        <button type="button" class="toggle rail-btn gp-minus" data-result="Attack Error">ATK ERR<span class="pts">−1</span></button>
+        <button type="button" class="toggle rail-btn gp-minus gp-wide" data-result="Dig Error">DIG ERROR<span class="pts">−1</span></button>
+        <button type="button" class="toggle rail-btn gp-plus" data-result="Block">BLOCK<span class="pts">+1</span></button>
+        <button type="button" class="toggle rail-btn gp-minus" data-result="Block Error">BLK ERR<span class="pts">−1</span></button>
+      </div>
     </div>
   </main>
 </div>

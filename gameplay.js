@@ -3,7 +3,13 @@ const GROUP_SIZE = 10;
 const MAX_UNDO = 5;
 const JOG_ITEM_HEIGHT = 36;
 const STATE_KEY = "vbtryouts_gameplay_state";
-const BASE_POINTS = { "+": 1, "-": -1 };
+const BASE_POINTS = {
+  "Service Ace": 1, "Serve Error": -1,
+  "Serve Receive": 1, "Serve Receive Error": -1,
+  "Attack Kill": 1, "Attack Error": -1,
+  "Dig Error": -1,
+  "Block": 1, "Block Error": -1,
+};
 
 let roster = [];
 let visiblePlayers = []; // up to 10 roster entries in the loaded number range, ascending
@@ -35,10 +41,7 @@ const els = {
   toast: document.getElementById("toast"),
 };
 
-const scoreButtons = [
-  document.getElementById("btnPlus"),
-  document.getElementById("btnMinus"),
-];
+const scoreButtons = Array.from(document.querySelectorAll(".gp-grid button"));
 
 function activePlayer() {
   return activeIndex === null ? null : visiblePlayers[activeIndex];
@@ -294,12 +297,13 @@ function submitAttempt(result) {
   }
 
   const pts = BASE_POINTS[result];
+  const sign = pts > 0 ? "+1" : "−1";
 
   adjustTally(p.playerNumber, 1, pts);
   advanceAfterScore();
   renderRows();
   refreshUI();
-  setToast(`✓ #${p.playerNumber} ${p.playerName} — ${result}1 (saving…)`, false);
+  setToast(`✓ #${p.playerNumber} ${p.playerName} — ${result} (${sign}) (saving…)`, false);
   persistState();
 
   postAttempt({ coach, playerNumber: p.playerNumber, playerName: p.playerName, skill: SKILL, result })
@@ -311,7 +315,7 @@ function submitAttempt(result) {
         playerName: p.playerName,
         points: response.points ?? pts,
       });
-      setToast(`✓ #${p.playerNumber} ${p.playerName} — ${result}1`, false);
+      setToast(`✓ #${p.playerNumber} ${p.playerName} — ${result} (${sign})`, false);
       refreshUI();
       persistState();
     })

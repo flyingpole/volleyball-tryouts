@@ -7,7 +7,7 @@
 // Manage deployments > Edit > New version > Deploy), open the Web app URL
 // directly in a browser with no query string — the JSON response's
 // "version" field should match this, confirming the redeploy actually took.
-const CODE_VERSION = "2026-07-21-four-skills";
+const CODE_VERSION = "2026-07-21-gameplay-categories";
 
 const SHEETS = {
   ROSTER: "Roster",
@@ -55,11 +55,31 @@ const SKILLS = [
 const POSITION_FILTER_OPTIONS = ["OH", "RS", "MB", "Def", "S"];
 
 const ROSTER_MAX_ROWS = 250; // headroom for players; raise if a tryout group is bigger
+const LOG_MAX_ROWS = 10000; // headroom for Game Play Rankings' bounded array-formula ranges
 
 // "Needs more looks" thresholds for the rankings tabs — tune freely.
 const FLAG_MIN_ATTEMPTS = 3;
 const FLAG_MIN_COACHES = 2;
 const FLAG_SCORE_GAP = 0.3;
+
+// Game Play's 9 buttons. Each action's point value is fixed, so the Result
+// column stores the action name itself (e.g. "Service Ace") and points are
+// looked up server-side — same pattern as Blocking's Red/Yellow/Green.
+// category groups the buttons for Game Play Rankings' per-category +/-
+// sequence columns (e.g. an "Attack" column reading "+-++--+"), so a coach
+// can see which specific play type is driving a player's total up or down.
+const GAME_PLAY_ACTIONS = [
+  { result: "Service Ace", points: 1, category: "Serve" },
+  { result: "Serve Error", points: -1, category: "Serve" },
+  { result: "Serve Receive", points: 1, category: "Serve Receive" },
+  { result: "Serve Receive Error", points: -1, category: "Serve Receive" },
+  { result: "Attack Kill", points: 1, category: "Attack" },
+  { result: "Attack Error", points: -1, category: "Attack" },
+  { result: "Dig Error", points: -1, category: "Dig" },
+  { result: "Block", points: 1, category: "Block" },
+  { result: "Block Error", points: -1, category: "Block" },
+];
+const GAME_PLAY_CATEGORIES = [...new Set(GAME_PLAY_ACTIONS.map((a) => a.category))];
 
 // ---------------------------------------------------------------------------
 // One-time setup. Run this manually from the Apps Script editor after pasting
@@ -87,7 +107,7 @@ function setupSheet() {
 
   buildSettingRankingsSheet(getOrCreateSheet(ss, SHEETS.SETTING_RANKINGS), "I");
 
-  buildSkillRankingsSheet(getOrCreateSheet(ss, SHEETS.GAME_PLAY_RANKINGS), "Game Play", "J");
+  buildGamePlayRankingsSheet(getOrCreateSheet(ss, SHEETS.GAME_PLAY_RANKINGS), "J");
 
   buildPositionRankingsSheet(getOrCreateSheet(ss, SHEETS.POSITION_RANKINGS));
 }
@@ -480,6 +500,63 @@ function buildSettingRankingsSheet(sheet, summaryColLetter) {
   sheet.getRange(4, 11, ROSTER_MAX_ROWS, 1).setFormulas(colK);
 }
 
+// Ranked by total points descending (Summary Sheet's SUMIFS column, same
+// generic mechanism as every other skill). Adds one column per category in
+// GAME_PLAY_CATEGORIES showing that category's own +/- sequence in
+// chronological order (e.g. "Attack" might read "+-++--+"), computed
+// directly off Log rather than a hidden data sheet — each cell is a
+// TEXTJOIN/IF array formula bounded to LOG_MAX_ROWS rows: mask in only this
+// player's non-deleted Game Play rows whose Result is one of that category's
+// actions, then map each to "+"/"-" by sign and join with no separator.
+function buildGamePlayRankingsSheet(sheet, summaryColLetter) {
+  sheet.clear();
+  sheet.getRange(1, 1, ROSTER_MAX_ROWS + 5, 20).clearDataValidations();
+  sheet.getRange("A1").setValue("Position filter:").setFontWeight("bold");
+  sheet.getRange("B1").setValue("All");
+  const rule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(["All"].concat(POSITION_FILTER_OPTIONS), true)
+    .build();
+  sheet.getRange("B1").setDataValidation(rule);
+
+  const headers = ["Rank", "Player #", "Name", "Positions", "Grade", "Total", "Attempts", "Coaches", "Flag"].concat(GAME_PLAY_CATEGORIES);
+  sheet.getRange(3, 1, 1, headers.length).setValues([headers]).setFontWeight("bold");
+  sheet.setFrozenRows(3);
+
+  const lastRow = 1 + ROSTER_MAX_ROWS;
+  const hasPlayer = `'${SHEETS.SUMMARY}'!$A$2:$A$${lastRow}<>""`;
+  const positionMatch = positionMatchFormula(`'${SHEETS.SUMMARY}'!$C$2:$C$${lastRow}`, "$B$1");
+  sheet.getRange("B4").setFormula(
+    `=IFERROR(SORT(FILTER({'${SHEETS.SUMMARY}'!$A$2:$D$${lastRow},'${SHEETS.SUMMARY}'!$${summaryColLetter}$2:$${summaryColLetter}$${lastRow}}, ${hasPlayer}, IF($B$1="All", ${hasPlayer}, ${positionMatch})), 5, FALSE), "")`
+  );
+
+  const lastLogRow = LOG_MAX_ROWS + 1;
+  const colA = [], colG = [], colH = [], colI = [];
+  const categoryCols = GAME_PLAY_CATEGORIES.map(() => []);
+  for (let i = 0; i < ROSTER_MAX_ROWS; i++) {
+    const r = 4 + i;
+    colA.push([`=IF(B${r}="","",ROW()-3)`]);
+    colG.push([`=IF(B${r}="","",COUNTIFS(Log!$C:$C,B${r},Log!$E:$E,"Game Play",Log!$J:$J,"<>TRUE"))`]);
+    colH.push([`=IF(B${r}="","",IFERROR(COUNTA(UNIQUE(FILTER(Log!$B:$B,Log!$C:$C=B${r},Log!$E:$E="Game Play",Log!$J:$J<>true))),0))`]);
+    colI.push([`=IF(B${r}="","",IFERROR(IF(OR(G${r}<${FLAG_MIN_ATTEMPTS},H${r}<${FLAG_MIN_COACHES}),"⚠ Needs more looks",""),""))`]);
+    GAME_PLAY_CATEGORIES.forEach((cat, catIdx) => {
+      const resultMatch = GAME_PLAY_ACTIONS
+        .filter((a) => a.category === cat)
+        .map((a) => `(Log!$F$2:$F$${lastLogRow}="${a.result}")`)
+        .join("+");
+      categoryCols[catIdx].push([
+        `=IF(B${r}="","",IFERROR(TEXTJOIN("",TRUE,ARRAYFORMULA(IF((Log!$C$2:$C$${lastLogRow}=B${r})*(${resultMatch})*(Log!$J$2:$J$${lastLogRow}<>TRUE),IF(Log!$H$2:$H$${lastLogRow}>0,"+","-"),""))),""))`,
+      ]);
+    });
+  }
+  sheet.getRange(4, 1, ROSTER_MAX_ROWS, 1).setFormulas(colA);
+  sheet.getRange(4, 7, ROSTER_MAX_ROWS, 1).setFormulas(colG);
+  sheet.getRange(4, 8, ROSTER_MAX_ROWS, 1).setFormulas(colH);
+  sheet.getRange(4, 9, ROSTER_MAX_ROWS, 1).setFormulas(colI);
+  categoryCols.forEach((col, idx) => {
+    sheet.getRange(4, 10 + idx, ROSTER_MAX_ROWS, 1).setFormulas(col);
+  });
+}
+
 // One tab, side by side: a separate ranked list (best to worst) for each
 // position in POSITION_FILTER_OPTIONS, so you can scan across and pick the
 // best available OH, RS, MB, Def, and Setter at a glance. Ranked by Summary
@@ -706,12 +783,13 @@ function computeSettingScore(result, hitTarget) {
   return hitTarget ? 1 : 0;
 }
 
-// Team point (+1) or team mistake (-1). Summary Sheet totals these with
-// SUMIFS instead of the usual AVERAGEIFS (see SKILLS' agg: "sum").
+// Result is one of GAME_PLAY_ACTIONS' names (e.g. "Service Ace"); its point
+// value is fixed there. Summary Sheet totals these with SUMIFS instead of
+// the usual AVERAGEIFS (see SKILLS' agg: "sum").
 function computeGamePlayScore(result) {
-  if (result === "+") return 1;
-  if (result === "-") return -1;
-  throw new Error(`Unknown result "${result}"`);
+  const action = GAME_PLAY_ACTIONS.find((a) => a.result === result);
+  if (!action) throw new Error(`Unknown result "${result}"`);
+  return action.points;
 }
 
 function ensureCoachSheet(ss, coach) {

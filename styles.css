@@ -604,6 +604,26 @@ select {
   color: #dff5ec;
 }
 
+.gp-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+.gp-grid .rail-btn {
+  min-height: 40px;
+  padding: 3px 3px;
+  font-size: 0.65rem;
+}
+
+.gp-grid .rail-btn .pts {
+  font-size: 0.58rem;
+}
+
+.gp-wide {
+  grid-column: 1 / -1;
+}
+
 .gp-plus.active {
   border-color: var(--green);
   background: var(--green);

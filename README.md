@@ -106,15 +106,21 @@ set specifically, even though ranking itself uses the combined rate.
 
 ## How the Game Play page works
 
-Same player list, jog wheel, coach picker, and Undo. Two buttons — logging
-immediately:
+Same player list, jog wheel, coach picker, and Undo. Nine buttons, grouped
+into five play types, each logging immediately:
 
-- **+1 (point won)** — the team scored on this play.
-- **-1 (mistake)** — the team lost the point because of this player.
+- **Serve**: Service Ace (+1) / Serve Error (-1)
+- **Serve Receive**: Serve Receive (+1) / Serve Receive Error (-1)
+- **Attack**: Attack Kill (+1) / Attack Error (-1)
+- **Dig**: Dig Error (-1) — no positive Dig button
+- **Block**: Block (+1) / Block Error (-1)
 
-Unlike the other skills, a player's Game Play score is a running *total*, not
-an average — shown live on their row instead of an attempt count.
-`Game Play Rankings` sorts by that total, highest first.
+Unlike the other skills, a player's Game Play score is a running *total* of
+every +1/-1, not an average — shown live on their row instead of an attempt
+count. `Game Play Rankings` sorts by that total, highest first, and also
+breaks it down into one column per play type (e.g. an "Attack" column reading
+`+-++--+`) so a coach can see which specific skill is driving a player's
+total up or down.
 
 ## One-time setup
 
@@ -219,7 +225,9 @@ A few tabs add skill-specific columns on top of that:
 - `Setting Rankings` shows separate Front % and Back % columns alongside the
   combined hit rate used for ranking.
 - `Game Play Rankings` sorts by total points (a sum, not an average) since
-  that skill scores +1/-1 per play rather than grading each attempt.
+  that skill scores +1/-1 per play rather than grading each attempt, and adds
+  a per-play-type column (Serve, Serve Receive, Attack, Dig, Block) showing
+  that type's own +/- sequence in order.
 
 `Position Rankings` shows five ranked lists side by side, one per position
 (`POSITION_FILTER_OPTIONS` in `Code.gs` — currently OH, RS, MB, Def, S),
