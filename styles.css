@@ -632,6 +632,22 @@ select {
   font-size: 0.85rem;
   line-height: 1.1;
   border-radius: 8px;
+  transition: background-color 0.08s ease, border-color 0.08s ease;
+}
+
+/* Brief confirmation flash on tap for buttons that auto-submit with no
+   separate confirm step — added/removed via JS (see flashButton in app.js)
+   for ~180ms. !important guarantees it's visible regardless of whatever
+   other state class (.active, quality-*, disabled) the button also has at
+   that instant. */
+.tap-flash {
+  background-color: var(--green) !important;
+  border-color: var(--green) !important;
+  color: white !important;
+}
+
+.tap-flash .pts {
+  color: #dff5ec !important;
 }
 
 .rail-btn .pts {

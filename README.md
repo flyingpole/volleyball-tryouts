@@ -9,6 +9,21 @@ during tryouts.
 - **Backend**: a Google Apps Script Web App bound to one Google Sheet — no
   database, no server to run.
 
+## Tap confirmation (every scoring button)
+
+Most scoring buttons across the app log immediately with no separate confirm
+step, so it can be hard to tell mid-scrimmage whether a tap actually landed
+without stopping to read the small toast text. Every one of them now gives
+two immediate signals that a tap registered:
+
+- **A brief green flash** on the button itself (~250ms), regardless of
+  whatever color it normally is.
+- **A short vibration** (~15ms) on devices that support it.
+
+The vibration doesn't work on iPhones — Apple has never implemented the
+Vibration API in Safari or Chrome-on-iOS (same underlying engine on iOS) — it
+silently does nothing there. The color flash works everywhere.
+
 ## The header menu (every page)
 
 Tap **⋮** next to "← Skills" to open a small panel with two things, shared

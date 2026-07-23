@@ -269,6 +269,8 @@ els.startNumberInput.addEventListener("keydown", (e) => {
 scoreButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
     if (btn.disabled) return;
+    flashButton(btn);
+    hapticTap();
     submitAttempt(btn.dataset.result, btn.dataset.hit === "true");
   });
 });

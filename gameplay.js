@@ -295,6 +295,8 @@ els.removeBtn.addEventListener("click", removeActivePlayer);
 scoreButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
     if (btn.disabled) return;
+    flashButton(btn);
+    hapticTap();
     submitAttempt(btn.dataset.result);
   });
 });

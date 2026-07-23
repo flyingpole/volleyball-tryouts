@@ -10,6 +10,28 @@ function isScriptConfigured() {
   );
 }
 
+// Most scoring buttons across the app auto-submit on tap with no separate
+// confirm step, so it's hard to tell a tap actually registered without
+// reading the small toast text. These two give an immediate tap
+// confirmation instead. Call both right after the disabled-check in a
+// button's click handler, before doing the actual submit.
+//
+// navigator.vibrate is unsupported on iOS — Apple has never implemented the
+// Vibration API in WebKit (Safari or Chrome-on-iOS, same engine) — so this
+// silently no-ops there. The color flash still works everywhere.
+function hapticTap() {
+  if (navigator.vibrate) {
+    try { navigator.vibrate(15); } catch (err) {
+      // Some browsers throw if called outside a user gesture — harmless to ignore.
+    }
+  }
+}
+
+function flashButton(btn) {
+  btn.classList.add("tap-flash");
+  setTimeout(() => btn.classList.remove("tap-flash"), 180);
+}
+
 // Wires the header's kebab-menu (Coach select + Reset), shared by every
 // skill page. onReset is called only after the user confirms, and only
 // clears THIS device's local state (undo stack, tallies, saved

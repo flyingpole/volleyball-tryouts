@@ -289,6 +289,8 @@ els.startNumberInput.addEventListener("keydown", (e) => {
 
 els.btnMissed.addEventListener("click", () => {
   if (els.btnMissed.disabled) return;
+  flashButton(els.btnMissed);
+  hapticTap();
   submitAttempt("Missed", false);
 });
 
@@ -302,11 +304,15 @@ velocityButtons.forEach((btn) => {
 
 els.btnHitTarget.addEventListener("click", () => {
   if (els.btnHitTarget.disabled) return;
+  flashButton(els.btnHitTarget);
+  hapticTap();
   submitAttempt(pendingResult, true);
 });
 
 els.btnMissedTarget.addEventListener("click", () => {
   if (els.btnMissedTarget.disabled) return;
+  flashButton(els.btnMissedTarget);
+  hapticTap();
   submitAttempt(pendingResult, false);
 });
 
