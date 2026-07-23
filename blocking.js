@@ -310,6 +310,12 @@ function resetPageState() {
 }
 
 els.timeInput.addEventListener("input", refreshUI);
+els.timeInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    els.timeInput.blur(); // dismiss the on-screen keyboard so it stops covering the quality buttons
+  }
+});
 
 scoreButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
