@@ -553,8 +553,11 @@ select {
 
 .player-jog-wrap {
   position: relative;
-  height: 112px; /* fixed, not flex-computed — some mobile browsers weren't
-                    resolving flex:1 through the grid/flex chain above this */
+  height: 156px; /* fixed, not flex-computed — some mobile browsers weren't
+                    resolving flex:1 through the grid/flex chain above this.
+                    Grown from 112px to fill the space freed by removing the
+                    Start#/Load row (the jog wheel now seeds the group
+                    directly, no manual Load step needed). */
 }
 
 .player-jog {

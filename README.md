@@ -53,19 +53,26 @@ rather than sitting wherever it was last left. Without that, jumping from
 player #1 (where the wheel happened to be) to the active player #28 meant
 scrolling through the whole roster — only 2-3 names visible at a time — just
 to get back to somewhere useful. Now it re-centers automatically whenever the
-active player changes: tapping a row, loading a new group, or auto-advancing
-after a score. You can still scroll it yourself at any time to jump to a
-different player; it only takes over right after *you* aren't the one moving
-it.
+active player changes: tapping a row, jumping to a new player, or
+auto-advancing after a score. You can still scroll it yourself at any time to
+jump to a different player; it only takes over right after *you* aren't the
+one moving it.
+
+It's also the only way to jump the on-screen 10-player window to a specific
+starting point — there's no separate Start#/Load field. Scroll the wheel to
+any player and the row list re-centers on them automatically. The first time
+you open one of these pages (no saved state on that device yet), it loads
+starting from the lowest player number on the roster, so there's nothing to
+set up before scoring the first player.
 
 ## How the Serving page works
 
-1. Type the player number you're starting with (e.g. `11`) and tap **Load**.
-   The app shows every roster player from that number up to 9 higher (e.g.
-   11–20) as a stack of rows, in numerical order — however many of those
-   actually exist on the roster.
-2. Tap a player's row to make them the active player (it highlights). The
-   first player in the group is selected automatically after Load.
+1. The app loads automatically, starting from the lowest player number on
+   the roster (or wherever you left off, if this device has a saved
+   session) — no Load step needed. It shows that player and the next 9
+   roster players as a stack of rows, in numerical order.
+2. Tap a player's row to make them the active player (it highlights), or
+   scroll the jog wheel to jump to any other player number.
 
 ### Scoring
 

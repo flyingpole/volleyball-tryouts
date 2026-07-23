@@ -7,6 +7,7 @@ const STATE_KEY = "vbtryouts_passing_state";
 let roster = [];
 let visiblePlayers = []; // up to 10 roster entries in the loaded number range, ascending
 let activeIndex = null; // index into visiblePlayers
+let currentStart = null; // lowest player number in the current 10-player window
 let sessionTallies = {}; // playerNumber -> { attempts, points }
 let undoStack = []; // most-recent-first, confirmed (server-acknowledged) attempts only, capped at MAX_UNDO
 let jogSettleTimer = null;
@@ -15,7 +16,7 @@ let suppressJogSettle = false; // true while we're programmatically scrolling th
 
 function persistState() {
   saveJSON(STATE_KEY, {
-    startNumber: els.startNumberInput.value,
+    start: currentStart,
     activePlayerNumber: activePlayer() ? activePlayer().playerNumber : undefined,
     tallies: sessionTallies,
     undoStack,
@@ -26,8 +27,6 @@ function persistState() {
 const els = {
   banner: document.getElementById("configBanner"),
   coachSelect: document.getElementById("coachSelect"),
-  startNumberInput: document.getElementById("startNumberInput"),
-  loadGroupBtn: document.getElementById("loadGroupBtn"),
   playerRows: document.getElementById("playerRows"),
   playerJog: document.getElementById("playerJog"),
   activePlayerLabel: document.getElementById("activePlayerLabel"),
@@ -94,19 +93,16 @@ function setToast(message, isError) {
   els.toast.className = "toast " + (isError ? "error" : "success");
 }
 
+// start: the lowest player number to show in the 10-player window.
 // preferredPlayerNumber: used when restoring a saved session or sliding to a
 // specific player, so that player stays selected instead of defaulting to the
 // first in the group. reseed: true when this is a deliberate new starting
-// point (manual Load, jog wheel) rather than an automatic slide-forward —
-// only deliberate seeds get remembered as the rotation's loop-back point.
-// skipJogCenter: true when this load was itself triggered by the jog wheel
-// settling on a player — no need to re-center it on itself.
-function loadGroup(preferredPlayerNumber, reseed, skipJogCenter) {
-  const start = parseInt(els.startNumberInput.value, 10);
-  if (!Number.isFinite(start)) {
-    setToast("Enter a starting player number.", true);
-    return;
-  }
+// point (jog wheel) rather than an automatic slide-forward — only deliberate
+// seeds get remembered as the rotation's loop-back point. skipJogCenter: true
+// when this load was itself triggered by the jog wheel settling on a
+// player — no need to re-center it on itself.
+function loadGroup(start, preferredPlayerNumber, reseed, skipJogCenter) {
+  currentStart = start;
   if (reseed) seedStart = start;
   visiblePlayers = roster
     .filter((p) => {
@@ -185,8 +181,7 @@ function onJogSettled() {
 // Re-centers the main 10-player group so the found player lands near the
 // middle, with players above/below shown by their normal numeric sequence.
 function jumpToPlayer(playerNumber) {
-  els.startNumberInput.value = String(playerNumber - 4);
-  loadGroup(playerNumber, true, true);
+  loadGroup(playerNumber - 4, playerNumber, true, true);
 }
 
 // Keeps the jog wheel following whichever player is active, so it's always
@@ -226,12 +221,9 @@ function advanceAfterScore() {
   const hasMoreAhead = roster.some((p) => Number(p.playerNumber) > lastNum);
 
   if (hasMoreAhead) {
-    const start = parseInt(els.startNumberInput.value, 10);
-    els.startNumberInput.value = String((Number.isFinite(start) ? start : lastNum - GROUP_SIZE + 1) + 1);
-    loadGroup(lastNum + 1);
+    loadGroup(currentStart + 1, lastNum + 1);
   } else if (seedStart !== null) {
-    els.startNumberInput.value = String(seedStart);
-    loadGroup();
+    loadGroup(seedStart);
   }
 }
 
@@ -260,12 +252,21 @@ async function init() {
     const savedState = loadJSON(STATE_KEY, null);
     if (savedState && savedState.tallies) sessionTallies = savedState.tallies;
     if (savedState && Array.isArray(savedState.undoStack)) undoStack = savedState.undoStack;
-    if (savedState && savedState.startNumber) {
-      seedStart = Number.isFinite(savedState.seedStart)
-        ? savedState.seedStart
-        : parseInt(savedState.startNumber, 10);
-      els.startNumberInput.value = savedState.startNumber;
-      loadGroup(savedState.activePlayerNumber);
+
+    if (roster.length) {
+      const lowest = Math.min(...roster.map((p) => Number(p.playerNumber)));
+      if (savedState && Number.isFinite(savedState.start)) {
+        // Resuming a saved session — restore its loop-back point too, so
+        // sliding forward past the end of the roster still loops back to
+        // wherever this rotation was originally seeded, not the lowest number.
+        seedStart = Number.isFinite(savedState.seedStart) ? savedState.seedStart : savedState.start;
+        loadGroup(savedState.start, savedState.activePlayerNumber);
+      } else {
+        // No saved starting point yet (first-ever visit) — default to the
+        // lowest player number on the roster instead of requiring a manual
+        // Start#/Load step, and seed the loop-back point there too.
+        loadGroup(lowest, undefined, true);
+      }
     }
   } catch (err) {
     setToast(`Couldn't load setup data: ${err.message}`, true);
@@ -282,23 +283,23 @@ initHeaderMenu(resetPageState);
 
 // Clears this device's local state only (undo stack, tallies, saved group) —
 // never touches the Google Sheet. See the Reset button in the header menu.
+// Re-loads the group at the roster's lowest number, same as a fresh visit,
+// since there's no more manual Start#/Load step to fall back on.
 function resetPageState() {
   localStorage.removeItem(STATE_KEY);
-  visiblePlayers = [];
-  activeIndex = null;
   sessionTallies = {};
   undoStack = [];
   seedStart = null;
-  els.startNumberInput.value = "";
-  renderRows();
-  refreshUI();
+  if (roster.length) {
+    loadGroup(Math.min(...roster.map((p) => Number(p.playerNumber))), undefined, true);
+  } else {
+    visiblePlayers = [];
+    activeIndex = null;
+    renderRows();
+    refreshUI();
+  }
   setToast("Local data reset for this device.", false);
 }
-
-els.loadGroupBtn.addEventListener("click", () => loadGroup(undefined, true));
-els.startNumberInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") loadGroup(undefined, true);
-});
 
 scoreButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
