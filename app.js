@@ -1,4 +1,16 @@
 // Shared helpers used across skill pages.
+//
+// CACHE-BUSTING: every HTML page loads this file (and its own JS, and
+// styles.css) with a "?v=N" query string. Browsers cache each resource
+// independently, so it's possible for a phone to have a stale app.js
+// cached alongside a fresh page-specific JS (or vice versa) — if a page's
+// JS calls a function this file doesn't have yet, that's a silent
+// ReferenceError that breaks the whole click handler, not just a missing
+// visual touch. Bumping the shared version number forces every page to
+// refetch everything together as one consistent set. Whenever ANY of
+// app.js, styles.css, or a page's own .js file changes, bump "?v=N" in
+// every <script>/<link> tag that references it, across every HTML file
+// (not just the one you edited) — grep for "?v=" to find them all.
 
 const COACH_KEY = "vbtryouts_coach";
 

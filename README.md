@@ -356,3 +356,16 @@ browser, or serve the folder with any static file server, to work on the UI.
 Until `config.js` has a real Web App URL, the app shows a banner and the
 roster/submit features are disabled so you can still exercise the button
 logic and score preview offline.
+
+### Cache-busting
+
+Every page loads `styles.css`, `config.js`, `app.js`, and its own JS with a
+`?v=N` query string. Browsers cache each file independently, so without
+this a phone could end up with a stale `app.js` next to a fresh
+page-specific JS (or vice versa) — if the fresh file calls something the
+stale one doesn't have yet, that's a silent error that breaks the whole
+button, not just a missing visual touch (this has happened). Whenever you
+change `app.js`, `styles.css`, or any page's own `.js` file, bump `?v=N` in
+every `<script>`/`<link>` tag that references it, across every HTML file —
+grep for `?v=` to find them all — so GitHub Pages' CDN cache and every
+visitor's browser cache both get invalidated together.
