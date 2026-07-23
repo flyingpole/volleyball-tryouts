@@ -97,8 +97,11 @@ every grade a player got, in the order it happened (e.g. `013233110032311121`)
 
 ## How the Attacking page works
 
-Same player list, jog wheel, coach picker, and Undo as the other pages.
-Three buttons, each logging immediately:
+Same player list, jog wheel, coach picker, and Undo as the other pages, but
+**the active player does NOT auto-advance** — hitters take several reps in a
+row, so the coach stays on the same player (their running attempt count
+shows right in the label) until tapping a different row themselves. Three
+buttons, each logging immediately:
 
 - **Kill (+)** — 1 point. **Attempt (.)** — 0 points. **Error (-)** — -1 point.
 
