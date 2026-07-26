@@ -22,6 +22,7 @@ let jogSelectedPlayerNumber = null; // whichever roster player is centered/tappe
 let sessionTallies = {}; // playerNumber -> { attempts, points }
 let undoStack = []; // most-recent-first, confirmed (server-acknowledged) attempts only, capped at MAX_UNDO
 let jogSettleTimer = null;
+let suppressJogSettle = false; // true while we're programmatically scrolling the jog wheel, so that scroll doesn't get misread as the user hunting for a player
 
 function persistState() {
   saveJSON(STATE_KEY, {
@@ -120,6 +121,7 @@ function selectActivePlayer(playerNumber) {
   activePlayerNumber = playerNumber;
   renderCourt();
   refreshUI();
+  scrollJogToPlayer(playerNumber);
   persistState();
 }
 
@@ -172,6 +174,7 @@ function renderPlayerJog() {
 }
 
 els.playerJog.addEventListener("scroll", () => {
+  if (suppressJogSettle) return;
   clearTimeout(jogSettleTimer);
   jogSettleTimer = setTimeout(onJogSettled, 120);
 });
@@ -190,6 +193,27 @@ function onJogSettled() {
     }
   });
   if (closest) jogSelectedPlayerNumber = Number(closest.dataset.playerNumber);
+}
+
+// Keeps the "Find player" jog wheel following whichever player is active —
+// tapping a court row, adding someone new, or undoing a sub — so it's always
+// close by instead of wherever it was last left. Also updates the "add
+// candidate" to match, since the wheel visually centering on this player
+// should mean it's now selected, same as if the coach had scrolled there
+// themselves. Suppresses the wheel's own scroll-settle detection for this
+// one programmatic scroll so it doesn't fight with real user scrolling.
+function scrollJogToPlayer(playerNumber) {
+  const jog = els.playerJog;
+  const item = [...jog.querySelectorAll(".player-jog-item")].find(
+    (el) => String(el.dataset.playerNumber) === String(playerNumber)
+  );
+  if (!item) return;
+  const target = item.offsetTop + item.offsetHeight / 2 - jog.clientHeight / 2;
+  suppressJogSettle = true;
+  jog.scrollTo({ top: target, behavior: "auto" });
+  jogSelectedPlayerNumber = Number(playerNumber);
+  clearTimeout(jogSettleTimer);
+  setTimeout(() => { suppressJogSettle = false; }, 200);
 }
 
 // Adds the current "Find player" candidate to a side, capped at
@@ -274,6 +298,7 @@ async function init() {
       activePlayerNumber = savedState.activePlayerNumber ?? null;
     }
     renderCourt();
+    if (activePlayer()) scrollJogToPlayer(activePlayer().playerNumber);
   } catch (err) {
     setToast(`Couldn't load setup data: ${err.message}`, true);
   }
@@ -384,7 +409,10 @@ function performUndo() {
   const undone = undoStack.shift();
 
   adjustTally(undone.playerNumber, -1, -undone.points);
-  if (findOnCourtSide(undone.playerNumber)) activePlayerNumber = undone.playerNumber;
+  if (findOnCourtSide(undone.playerNumber)) {
+    activePlayerNumber = undone.playerNumber;
+    scrollJogToPlayer(undone.playerNumber);
+  }
   renderCourt();
   refreshUI();
   setToast(`↩ Undoing #${undone.playerNumber} ${undone.playerName || ""}…`, false);
