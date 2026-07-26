@@ -356,6 +356,19 @@ rankings tab's filter dropdown and Position Rankings' columns together.
    redeploy (**Deploy → Manage deployments → Edit → New version**) and re-run
    `setupSheet()` to build the new tabs.
 
+## Troubleshooting
+
+### Attacking's "+" or "-" throws a parse error in the `Log` tab
+`Log`'s Result column stores Attacking's raw symbols (`+`/`.`/`-`). Sheets
+normally treats a cell starting with `+` or `-` as the start of a
+number/formula — with nothing after it to complete that, a lone `+` or `-`
+throws a parse error instead of just storing the symbol. `setupLogSheet()`
+now formats that column as Plain Text so this can't happen going forward, but
+the fix only takes effect once you paste in the updated `Code.gs` and
+re-run `setupSheet()` (safe to re-run any time — see step 3 above). Any
+already-broken cells from before the fix need to be retyped by hand — once
+the column is Plain Text, retyping `+` or `-` into them will stick.
+
 ## Local development
 
 These are static files — no build step. Open `index.html` directly in a

@@ -7,7 +7,7 @@
 // Manage deployments > Edit > New version > Deploy), open the Web app URL
 // directly in a browser with no query string — the JSON response's
 // "version" field should match this, confirming the redeploy actually took.
-const CODE_VERSION = "2026-07-22-fix-descending-sort-blanks";
+const CODE_VERSION = "2026-07-24-fix-log-result-plaintext";
 
 const SHEETS = {
   ROSTER: "Roster",
@@ -137,6 +137,14 @@ function setupLogSheet(ss) {
   ];
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setWrap(true).setHorizontalAlignment("center");
   sheet.setFrozenRows(1);
+
+  // Attacking's Result values ("+"/"-"/".") get appended as plain strings,
+  // but Sheets' normal value inference treats a leading "+" or "-" as the
+  // start of a number/formula — a lone "+" or "-" has nothing to complete
+  // it, so it throws a parse error instead of just storing the symbol.
+  // Forcing this column to Plain Text turns that inference off, so appended
+  // values are always stored literally regardless of what they start with.
+  sheet.getRange("F2:F").setNumberFormat("@");
 }
 
 // Builds a formula fragment that checks whether a comma-separated Positions
