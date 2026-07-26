@@ -364,10 +364,16 @@ normally treats a cell starting with `+` or `-` as the start of a
 number/formula — with nothing after it to complete that, a lone `+` or `-`
 throws a parse error instead of just storing the symbol. `setupLogSheet()`
 now formats that column as Plain Text so this can't happen going forward, but
-the fix only takes effect once you paste in the updated `Code.gs` and
-re-run `setupSheet()` (safe to re-run any time — see step 3 above). Any
-already-broken cells from before the fix need to be retyped by hand — once
-the column is Plain Text, retyping `+` or `-` into them will stick.
+the fix only takes effect once you paste in the updated `Code.gs`, save, and
+re-run `setupSheet()` (safe to re-run any time — see step 3 above).
+
+Any cells that broke before the fix need a separate repair, since the
+parse error already destroyed what was typed there. Run
+`repairAttackingResultCells()` once from the Apps Script editor's function
+dropdown (no redeploy needed) — it looks up each broken row's Points value
+(a real number, never affected by this bug) to figure out what the Result
+should have been (`1` → `+`, `0` → `.`, `-1` → `-`) and rewrites just that
+cell. Safe to run more than once.
 
 ## Local development
 

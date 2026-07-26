@@ -147,6 +147,38 @@ function setupLogSheet(ss) {
   sheet.getRange("F2:F").setNumberFormat("@");
 }
 
+// One-time repair for Attacking rows logged before setupLogSheet() started
+// formatting Result as Plain Text — those cells show a parse error instead
+// of "+"/"."/"-". Points (a real number, never a coerced string) was never
+// affected and uniquely determines what Result should have been, so this
+// looks up each broken row's Points and rewrites Result from it. Safe to
+// run more than once — it only touches rows that still need fixing. Run it
+// once from the Apps Script editor's function dropdown after pasting this
+// file in and saving (no redeploy needed; this doesn't touch the Web App).
+function repairAttackingResultCells() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEETS.LOG);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+  const numRows = lastRow - 1;
+
+  const skillValues = sheet.getRange(2, 5, numRows, 1).getValues(); // E: Skill
+  const pointsValues = sheet.getRange(2, 8, numRows, 1).getValues(); // H: Points
+  // Display values never throw even for a cell stuck showing a parse error.
+  const resultDisplay = sheet.getRange(2, 6, numRows, 1).getDisplayValues(); // F: Result
+  const pointsToSymbol = { 1: "+", 0: ".", "-1": "-" };
+
+  let fixed = 0;
+  for (let i = 0; i < numRows; i++) {
+    const current = resultDisplay[i][0];
+    if (skillValues[i][0] !== "Attacking" || current === "+" || current === "." || current === "-") continue;
+    const symbol = pointsToSymbol[pointsValues[i][0]];
+    if (symbol === undefined) continue; // unexpected Points value — leave for manual review
+    sheet.getRange(i + 2, 6).setValue(symbol);
+    fixed++;
+  }
+  Logger.log(`Repaired ${fixed} Attacking Result cell(s).`);
+}
+
 // Builds a formula fragment that checks whether a comma-separated Positions
 // cell contains an exact position code — e.g. "S" must match "OH, S" but NOT
 // "RS" (a naive contains/SEARCH would wrongly match "RS" too, since it
