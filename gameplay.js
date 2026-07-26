@@ -81,7 +81,8 @@ function renderCourtSide(container, list) {
     btn.className = "court-row" + (String(p.playerNumber) === String(activePlayerNumber) ? " active" : "");
 
     const label = document.createElement("span");
-    label.textContent = `#${p.playerNumber}`;
+    label.className = "label";
+    label.textContent = `#${p.playerNumber} ${p.playerName || ""}`;
     btn.appendChild(label);
 
     // Game Play's score is a running total, not an attempt count — same
@@ -112,7 +113,7 @@ function selectActivePlayer(playerNumber) {
 function refreshUI() {
   const p = activePlayer();
   els.activePlayerLabel.textContent = p
-    ? `#${p.playerNumber}`
+    ? `#${p.playerNumber} ${p.playerName || ""}`
     : (onCourt.side1.length || onCourt.side2.length ? "Tap a player" : "Add players to the court");
 
   const ready = !!p && isScriptConfigured();
@@ -208,7 +209,7 @@ function addToSide(sideKey) {
   renderCourt();
   refreshUI();
   persistState();
-  setToast(`✓ Added #${player.playerNumber} to ${SIDE_LABELS[sideKey]}`, false);
+  setToast(`✓ Added #${player.playerNumber} ${player.playerName || ""} to ${SIDE_LABELS[sideKey]}`, false);
 }
 
 // Subs the active player off the court entirely. Their tally/undo history
@@ -223,7 +224,7 @@ function removeActivePlayer() {
   renderCourt();
   refreshUI();
   persistState();
-  setToast(`Removed #${p.playerNumber} from the court`, false);
+  setToast(`Removed #${p.playerNumber} ${p.playerName || ""} from the court`, false);
 }
 
 async function init() {
@@ -337,7 +338,7 @@ function submitAttempt(result) {
   adjustTally(p.playerNumber, 1, pts);
   renderCourt();
   refreshUI();
-  setToast(`✓ #${p.playerNumber} — ${result} (${sign}) (saving…)`, false);
+  setToast(`✓ #${p.playerNumber} ${p.playerName || ""} — ${result} (${sign}) (saving…)`, false);
   persistState();
 
   postAttempt({ coach, playerNumber: p.playerNumber, playerName: p.playerName, skill: SKILL, result })
@@ -349,7 +350,7 @@ function submitAttempt(result) {
         playerName: p.playerName,
         points: response.points ?? pts,
       });
-      setToast(`✓ #${p.playerNumber} — ${result} (${sign})`, false);
+      setToast(`✓ #${p.playerNumber} ${p.playerName || ""} — ${result} (${sign})`, false);
       refreshUI();
       persistState();
     })
@@ -357,9 +358,9 @@ function submitAttempt(result) {
       if (err.confirmed) {
         adjustTally(p.playerNumber, -1, -pts);
         renderCourt();
-        setToast(`⚠ #${p.playerNumber} failed to save: ${err.message}`, true);
+        setToast(`⚠ #${p.playerNumber} ${p.playerName || ""} failed to save: ${err.message}`, true);
       } else {
-        setToast(`⚠ #${p.playerNumber}: couldn't confirm save (${err.message}). Check the Log sheet before re-scoring.`, true);
+        setToast(`⚠ #${p.playerNumber} ${p.playerName || ""}: couldn't confirm save (${err.message}). Check the Log sheet before re-scoring.`, true);
       }
       persistState();
     });
@@ -373,12 +374,12 @@ function performUndo() {
   if (findOnCourtSide(undone.playerNumber)) activePlayerNumber = undone.playerNumber;
   renderCourt();
   refreshUI();
-  setToast(`↩ Undoing #${undone.playerNumber}…`, false);
+  setToast(`↩ Undoing #${undone.playerNumber} ${undone.playerName || ""}…`, false);
   persistState();
 
   postUndo({ coach: undone.coach, rowNumber: undone.rowNumber })
     .then(() => {
-      setToast(`↩ Undid #${undone.playerNumber}`, false);
+      setToast(`↩ Undid #${undone.playerNumber} ${undone.playerName || ""}`, false);
     })
     .catch((err) => {
       if (err.confirmed) {

@@ -739,7 +739,10 @@ select {
 
 .court-columns {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* minmax(0, 1fr), not plain 1fr — a bare 1fr track has an implicit
+     min-width:auto, so it won't shrink below an unbroken player name's
+     natural width and can blow out the whole page's layout. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 6px;
   flex: 1;
   min-height: 0;
@@ -748,6 +751,7 @@ select {
 .court-col {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   min-height: 0;
 }
 
@@ -788,7 +792,18 @@ select {
   min-height: 0;
 }
 
+.court-row .label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+
 .court-row .tally {
+  flex-shrink: 0;
+  margin-left: 4px;
   font-size: 0.58rem;
   font-weight: 500;
   color: var(--gray);
