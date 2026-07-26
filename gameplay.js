@@ -80,10 +80,16 @@ function renderCourtSide(container, list) {
     btn.type = "button";
     btn.className = "court-row" + (String(p.playerNumber) === String(activePlayerNumber) ? " active" : "");
 
-    const label = document.createElement("span");
-    label.className = "label";
-    label.textContent = `#${p.playerNumber} ${p.playerName || ""}`;
-    btn.appendChild(label);
+    // Jersey # and tally share a top line; the name gets its own line below,
+    // full-width, so it truncates far less often than when it had to share
+    // one line with the number.
+    const top = document.createElement("span");
+    top.className = "court-row-top";
+
+    const jersey = document.createElement("span");
+    jersey.className = "jersey";
+    jersey.textContent = `#${p.playerNumber}`;
+    top.appendChild(jersey);
 
     // Game Play's score is a running total, not an attempt count — same
     // reasoning as the row list this replaces.
@@ -91,7 +97,14 @@ function renderCourtSide(container, list) {
     const tallySpan = document.createElement("span");
     tallySpan.className = "tally";
     tallySpan.textContent = tally ? `${tally.points > 0 ? "+" : ""}${tally.points}` : "";
-    btn.appendChild(tallySpan);
+    top.appendChild(tallySpan);
+
+    btn.appendChild(top);
+
+    const name = document.createElement("span");
+    name.className = "name";
+    name.textContent = p.playerName || "";
+    btn.appendChild(name);
 
     btn.addEventListener("click", () => selectActivePlayer(p.playerNumber));
     container.appendChild(btn);
