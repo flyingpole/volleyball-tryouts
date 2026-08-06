@@ -7,7 +7,7 @@
 // Manage deployments > Edit > New version > Deploy), open the Web app URL
 // directly in a browser with no query string — the JSON response's
 // "version" field should match this, confirming the redeploy actually took.
-const CODE_VERSION = "2026-07-24-fix-log-result-plaintext";
+const CODE_VERSION = "2026-07-25-add-digging-skill";
 
 const SHEETS = {
   ROSTER: "Roster",
@@ -21,6 +21,7 @@ const SHEETS = {
   BLOCKING_RANKINGS: "Blocking Rankings",
   SETTING_RANKINGS: "Setting Rankings",
   GAME_PLAY_RANKINGS: "Game Play Rankings",
+  DIGGING_RANKINGS: "Digging Rankings",
   POSITION_RANKINGS: "Position Rankings",
 };
 
@@ -47,6 +48,7 @@ const SKILLS = [
   { name: "Blocking", col: "H", lowerIsBetter: true },
   { name: "Setting", col: "I" },
   { name: "Game Play", col: "J", agg: "sum" },
+  { name: "Digging", col: "K" },
 ];
 
 // Position codes used on Roster's free-text Positions field (e.g. "OH, MB")
@@ -101,6 +103,8 @@ function setupSheet() {
   buildTieBreakRankingsSheet(getOrCreateSheet(ss, SHEETS.PASSING_RANKINGS), "Passing", SHEETS.PASSING_DATA, "0-Pass %");
 
   buildSkillRankingsSheet(getOrCreateSheet(ss, SHEETS.ATTACKING_RANKINGS), "Attacking", "G", { label: "Sequence", sourceColumnLetter: "F" });
+
+  buildSkillRankingsSheet(getOrCreateSheet(ss, SHEETS.DIGGING_RANKINGS), "Digging", "K", { label: "Sequence", sourceColumnLetter: "F" });
 
   buildBlockingDataSheet(getOrCreateSheet(ss, SHEETS.BLOCKING_DATA));
   buildBlockingRankingsSheet(getOrCreateSheet(ss, SHEETS.BLOCKING_RANKINGS), SHEETS.BLOCKING_DATA);
@@ -787,6 +791,7 @@ function computeScoreDetails(skill, result, hitTarget, time) {
   if (skill === "Blocking") return computeBlockingScore(result, time);
   if (skill === "Setting") return { points: computeSettingScore(result, hitTarget), value2: null };
   if (skill === "Game Play") return { points: computeGamePlayScore(result), value2: null };
+  if (skill === "Digging") return { points: computeDiggingScore(result), value2: null };
   throw new Error(`Unsupported skill "${skill}"`);
 }
 
@@ -859,6 +864,15 @@ function computeGamePlayScore(result) {
   const action = GAME_PLAY_ACTIONS.find((a) => a.result === result);
   if (!action) throw new Error(`Unknown result "${result}"`);
   return action.points;
+}
+
+// Result IS the symbol shown in the Sequence column, same convention as
+// Attacking: "+" on target, "." neutral attempt, "-" error.
+function computeDiggingScore(result) {
+  if (result === "+") return 1;
+  if (result === ".") return 0;
+  if (result === "-") return -1;
+  throw new Error(`Unknown result "${result}"`);
 }
 
 function ensureCoachSheet(ss, coach) {

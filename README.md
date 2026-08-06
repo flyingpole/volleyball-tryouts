@@ -1,9 +1,9 @@
 # Volleyball Tryouts
 
-A no-database tryout evaluation app. Coaches score players on six skills
-(Serving, Passing, Attacking, Blocking, Setting, Game Play) from their phone;
-every attempt writes straight into a Google Sheet you can watch update live
-during tryouts.
+A no-database tryout evaluation app. Coaches score players on seven skills
+(Serving, Passing, Attacking, Blocking, Setting, Game Play, Digging) from
+their phone; every attempt writes straight into a Google Sheet you can watch
+update live during tryouts.
 
 - **Frontend**: static HTML/CSS/JS, hosted free on GitHub Pages.
 - **Backend**: a Google Apps Script Web App bound to one Google Sheet — no
@@ -27,7 +27,7 @@ silently does nothing there. The color flash works everywhere.
 ## The header menu (every page)
 
 Tap **⋮** next to "← Skills" to open a small panel with two things, shared
-identically across all six skill pages:
+identically across all seven skill pages:
 
 - **Coach** — the same dropdown every page used to show inline; picking a
   name here now shows it right under the page title (e.g. "Serving — Darin")
@@ -46,7 +46,7 @@ Without it, a leftover undo entry from testing could reference a Log row
 number that, after the Sheet is cleared, holds a real tryout attempt instead
 — tapping UNDO would then soft-delete the wrong row.
 
-## The "Find player" jog wheel (Serving, Passing, Attacking, Blocking, Setting)
+## The "Find player" jog wheel (Serving, Passing, Attacking, Blocking, Setting, Digging)
 
 This scrollable list always keeps itself centered on the active player,
 rather than sitting wherever it was last left. Without that, jumping from
@@ -206,6 +206,19 @@ breaks it down into one column per play type (e.g. an "Attack" column reading
 `+-++--+`) so a coach can see which specific skill is driving a player's
 total up or down.
 
+## How the Digging page works
+
+Same player list, jog wheel, coach picker, and Undo as Passing — every
+button IS the score, so tapping one logs immediately and auto-advances to
+the next player:
+
+- **Dig Error (-1)**, **Dig Attempt (0)**, or **On Target (+1)**.
+
+A player's Digging score is the *average* of those values, same
+reasoning as Attacking's hitting efficiency. `Digging Rankings` sorts by
+that average and shows a **Sequence** column — every symbol in order
+(e.g. `+.-.++`) — for a quick read on their digging pattern.
+
 ## One-time setup
 
 ### 1. Paste the backend into your Google Sheet
@@ -229,11 +242,11 @@ dropdown.
    bound to). This creates/rebuilds `Roster`, `Log`, `Summary Sheet`, one tab
    per name in `COACHES`, a rankings tab per skill (`Serving Rankings`,
    `Passing Rankings`, `Attacking Rankings`, `Blocking Rankings`, `Setting
-   Rankings`, `Game Play Rankings`), `Position Rankings`, and hidden helper
-   tabs (`Passing Data`, `Blocking Data`) used internally for tie-break/stat
-   sorting — no need to open them.
+   Rankings`, `Game Play Rankings`, `Digging Rankings`), `Position Rankings`,
+   and hidden helper tabs (`Passing Data`, `Blocking Data`) used internally
+   for tie-break/stat sorting — no need to open them.
 3. **If you already have a tab with columns like `Player #, Name, Positions,
-   Grade, Serving, Passing, Attacking, Blocking, Setting, Game Play`** —
+   Grade, Serving, Passing, Attacking, Blocking, Setting, Game Play, Digging`** —
    rename that tab to exactly `Summary Sheet` before running `setupSheet`. The
    script will overwrite its Player #/Name/Positions/Grade/skill columns with
    formulas that pull live from `Roster` and `Log`, so copy any player data
@@ -253,9 +266,9 @@ listed yet, the app adds a bare row for them automatically — no attempt is
 lost, though Positions/Grade will be blank until you fill them in.
 
 Every coach's tab has: Player #, Name, Positions, Grade, then one score column
-per skill (Serving, Passing, Attacking, Blocking, Setting, Game Play — Game
-Play's is a running total, Blocking's is average circuit time in seconds,
-everything else is an average score).
+per skill (Serving, Passing, Attacking, Blocking, Setting, Game Play, Digging
+— Game Play's is a running total, Blocking's is average circuit time in
+seconds, everything else is an average score).
 
 `Summary Sheet` has those same columns (combining every coach), plus a **Rank**
 next to each skill average (1 = best — Blocking ranks ascending since a lower
@@ -303,6 +316,8 @@ A few tabs add skill-specific columns on top of that:
 - `Passing Rankings` breaks ties by 0-Pass % (lower is better) via the hidden
   `Passing Data` helper tab, and shows a **Sequence** of every grade in order.
 - `Attacking Rankings` shows a **Sequence** of every +/./- symbol in order.
+- `Digging Rankings` shows a **Sequence** of every +/./- symbol in order,
+  same as Attacking.
 - `Blocking Rankings` sorts by Avg Time ascending (tie-broken by Best Time
   ascending) via the hidden `Blocking Data` helper tab, and shows Best/Worst/
   Avg Time plus a red→yellow→green gradient-shaded Avg Quality column.
