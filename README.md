@@ -373,22 +373,27 @@ rankings tab's filter dropdown and Position Rankings' columns together.
 
 ## Troubleshooting
 
-### Attacking's "+" or "-" throws a parse error in the `Log` tab
-`Log`'s Result column stores Attacking's raw symbols (`+`/`.`/`-`). Sheets
-normally treats a cell starting with `+` or `-` as the start of a
+### Attacking's or Digging's "+" or "-" throws a parse error in the `Log` tab
+`Log`'s Result column stores these skills' raw symbols (`+`/`.`/`-` —
+`PLUS_MINUS_SKILLS` in `Code.gs` lists which skills use this convention).
+Sheets normally treats a cell starting with `+` or `-` as the start of a
 number/formula — with nothing after it to complete that, a lone `+` or `-`
 throws a parse error instead of just storing the symbol. `setupLogSheet()`
-now formats that column as Plain Text so this can't happen going forward, but
+formats that column as Plain Text so this can't happen going forward, but
 the fix only takes effect once you paste in the updated `Code.gs`, save, and
-re-run `setupSheet()` (safe to re-run any time — see step 3 above).
+re-run `setupSheet()` (safe to re-run any time — see step 3 above). **If
+you're still seeing this on an attempt you just logged (not an old one)**,
+that's the sign this step hasn't actually been done yet — re-run
+`setupSheet()`, then try logging that attempt again.
 
 Any cells that broke before the fix need a separate repair, since the
 parse error already destroyed what was typed there. Run
-`repairAttackingResultCells()` once from the Apps Script editor's function
+`repairPlusMinusResultCells()` once from the Apps Script editor's function
 dropdown (no redeploy needed) — it looks up each broken row's Points value
 (a real number, never affected by this bug) to figure out what the Result
 should have been (`1` → `+`, `0` → `.`, `-1` → `-`) and rewrites just that
-cell. Safe to run more than once.
+cell, for every skill listed in `PLUS_MINUS_SKILLS`. Safe to run more than
+once.
 
 ## Local development
 

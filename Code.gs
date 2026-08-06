@@ -7,7 +7,7 @@
 // Manage deployments > Edit > New version > Deploy), open the Web app URL
 // directly in a browser with no query string — the JSON response's
 // "version" field should match this, confirming the redeploy actually took.
-const CODE_VERSION = "2026-07-25-add-digging-skill";
+const CODE_VERSION = "2026-07-25-generalize-plusminus-repair";
 
 const SHEETS = {
   ROSTER: "Roster",
@@ -151,15 +151,26 @@ function setupLogSheet(ss) {
   sheet.getRange("F2:F").setNumberFormat("@");
 }
 
-// One-time repair for Attacking rows logged before setupLogSheet() started
-// formatting Result as Plain Text — those cells show a parse error instead
-// of "+"/"."/"-". Points (a real number, never a coerced string) was never
-// affected and uniquely determines what Result should have been, so this
-// looks up each broken row's Points and rewrites Result from it. Safe to
-// run more than once — it only touches rows that still need fixing. Run it
-// once from the Apps Script editor's function dropdown after pasting this
-// file in and saving (no redeploy needed; this doesn't touch the Web App).
-function repairAttackingResultCells() {
+// Skills whose Result is the raw "+"/"."/"-" symbol (rather than a word like
+// "Slow" or a whole-number grade) — every one of these is exposed to the
+// leading-+/- parse-error bug repairPlusMinusResultCells() fixes below.
+// Add a skill's name here if it reuses this same scoring convention.
+const PLUS_MINUS_SKILLS = ["Attacking", "Digging"];
+
+// One-time repair for rows logged before setupLogSheet() started formatting
+// Result as Plain Text — those cells show a parse error instead of
+// "+"/"."/"-" (a lone leading "+" or "-" looks like the start of a
+// number/formula to Sheets, with nothing to complete it). Points (a real
+// number, never a coerced string) was never affected and uniquely
+// determines what Result should have been, so this looks up each broken
+// row's Points and rewrites Result from it. Safe to run more than once — it
+// only touches rows that still need fixing. Run it once from the Apps
+// Script editor's function dropdown after pasting this file in and saving
+// (no redeploy needed; this doesn't touch the Web App). If you're still
+// seeing the parse error on a FRESH attempt (not an old row), the fix in
+// setupLogSheet() hasn't actually taken effect yet — re-run setupSheet()
+// first (safe to re-run any time), then try logging that attempt again.
+function repairPlusMinusResultCells() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEETS.LOG);
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return;
@@ -174,13 +185,13 @@ function repairAttackingResultCells() {
   let fixed = 0;
   for (let i = 0; i < numRows; i++) {
     const current = resultDisplay[i][0];
-    if (skillValues[i][0] !== "Attacking" || current === "+" || current === "." || current === "-") continue;
+    if (PLUS_MINUS_SKILLS.indexOf(skillValues[i][0]) === -1 || current === "+" || current === "." || current === "-") continue;
     const symbol = pointsToSymbol[pointsValues[i][0]];
     if (symbol === undefined) continue; // unexpected Points value — leave for manual review
     sheet.getRange(i + 2, 6).setValue(symbol);
     fixed++;
   }
-  Logger.log(`Repaired ${fixed} Attacking Result cell(s).`);
+  Logger.log(`Repaired ${fixed} Result cell(s).`);
 }
 
 // Builds a formula fragment that checks whether a comma-separated Positions
