@@ -186,3 +186,11 @@ async function postAttempt(payload) {
 async function postUndo(payload) {
   return postJSON({ ...payload, action: "undo" });
 }
+
+async function postSettingBatch(payload) {
+  return postJSON({ ...payload, action: "logSettingBatch" });
+}
+
+async function postUndoBatch(payload) {
+  return postJSON({ ...payload, action: "undoBatch" });
+}

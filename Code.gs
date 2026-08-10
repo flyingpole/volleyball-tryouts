@@ -7,7 +7,7 @@
 // Manage deployments > Edit > New version > Deploy), open the Web app URL
 // directly in a browser with no query string — the JSON response's
 // "version" field should match this, confirming the redeploy actually took.
-const CODE_VERSION = "2026-07-25-generalize-plusminus-repair";
+const CODE_VERSION = "2026-07-26-setting-fixed-ball-batches";
 
 const SHEETS = {
   ROSTER: "Roster",
@@ -34,6 +34,12 @@ const COACHES = [
 ];
 
 const RESERVED_SHEETS = Object.values(SHEETS);
+
+// Setting logs a whole batch of balls at once (fixed count + how many hit
+// the target) instead of one attempt per tap — this is the server-side
+// allowlist for that fixed count, mirrored by the <select> options in
+// setting.html. Never trust the client's count beyond this list.
+const SETTING_BATCH_SIZES = [5, 10, 15, 20, 25];
 
 // Skill columns on Summary Sheet / each coach tab, in sheet order (E onward).
 // agg: "avg" (default) or "sum" — Game Play's score is a running total, not
@@ -705,6 +711,8 @@ function doPost(e) {
     const body = JSON.parse(e.postData.contents);
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     if (body.action === "undo") return handleUndo(ss, body);
+    if (body.action === "undoBatch") return handleUndoBatch(ss, body);
+    if (body.action === "logSettingBatch") return handleSettingBatch(ss, body);
     return handleLogAttempt(ss, body);
   } catch (err) {
     return jsonResponse({ success: false, error: String(err) });
@@ -786,6 +794,105 @@ function handleUndo(ss, body) {
     }
     logSheet.getRange(rowNumber, 10).setValue(true);
     return jsonResponse({ success: true, playerNumber, playerName, points });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Setting logs a whole batch of balls at once: a fixed count (5/10/15/20/25)
+// and how many hit the target, for one side (Front or Back). Rather than
+// changing the Log schema, this just writes `balls` individual rows in one
+// shot — `made` rows with hitTarget=true, the rest with hitTarget=false —
+// so every other formula (Summary Sheet, coach tabs, Setting Rankings) keeps
+// working unchanged; they already average one row per attempt. Returns the
+// contiguous row range so the frontend can undo the whole batch as one unit.
+function handleSettingBatch(ss, body) {
+  const coach = String(body.coach || "").trim();
+  const playerNumber = String(body.playerNumber || "").trim();
+  const side = String(body.side || "").trim();
+  const balls = parseInt(body.balls, 10);
+  const made = parseInt(body.made, 10);
+  if (!coach || !playerNumber || !side) {
+    throw new Error("Missing coach, playerNumber, or side");
+  }
+  if (RESERVED_SHEETS.indexOf(coach) !== -1) {
+    throw new Error(`Coach name "${coach}" conflicts with a reserved sheet name`);
+  }
+  if (SETTING_BATCH_SIZES.indexOf(balls) === -1) {
+    throw new Error(`Invalid balls count "${body.balls}"`);
+  }
+  if (!Number.isInteger(made) || made < 0 || made > balls) {
+    throw new Error(`Invalid made count "${body.made}"`);
+  }
+  const missed = balls - made;
+  const hitPoints = computeSettingScore(side, true);
+  const missPoints = computeSettingScore(side, false);
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  let playerName, startRow;
+  try {
+    playerName = ensureRosterRow(ss, playerNumber, body.playerName || "");
+    const logSheet = ss.getSheetByName(SHEETS.LOG);
+    const timestamp = new Date();
+    const rows = [];
+    for (let i = 0; i < made; i++) {
+      rows.push([timestamp, coach, playerNumber, playerName, "Setting", side, true, hitPoints, null, false]);
+    }
+    for (let i = 0; i < missed; i++) {
+      rows.push([timestamp, coach, playerNumber, playerName, "Setting", side, false, missPoints, null, false]);
+    }
+    startRow = logSheet.getLastRow() + 1;
+    if (rows.length) {
+      logSheet.getRange(startRow, 1, rows.length, 10).setValues(rows);
+    }
+  } finally {
+    lock.releaseLock();
+  }
+
+  try {
+    ensureCoachSheet(ss, coach);
+  } catch (err) {
+    // Non-fatal — the batch above is already safely logged.
+  }
+
+  return jsonResponse({ success: true, playerNumber, playerName, startRow, rowCount: balls, made, missed });
+}
+
+// Undoes a whole handleSettingBatch() submission as one unit — every row in
+// [startRow, startRow + rowCount) must still belong to the requesting coach
+// and not already be undone, or nothing is touched (same all-or-nothing
+// safety as the single-row undo above). Soft-deletes the whole range in one
+// call rather than rowCount separate ones.
+function handleUndoBatch(ss, body) {
+  const coach = String(body.coach || "").trim();
+  const startRow = parseInt(body.startRow, 10);
+  const rowCount = parseInt(body.rowCount, 10);
+  if (!coach || !Number.isInteger(startRow) || startRow < 2 || !Number.isInteger(rowCount) || rowCount < 1) {
+    throw new Error("Missing coach, startRow, or rowCount for undo");
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const logSheet = ss.getSheetByName(SHEETS.LOG);
+    if (startRow + rowCount - 1 > logSheet.getLastRow()) {
+      throw new Error("That batch is no longer there to undo");
+    }
+    const rows = logSheet.getRange(startRow, 1, rowCount, 10).getValues();
+    const playerNumber = rows[0][2];
+    const playerName = rows[0][3];
+    for (const row of rows) {
+      const [, rowCoach, , , , , , , , deleted] = row;
+      if (String(rowCoach) !== coach) {
+        throw new Error("That batch no longer matches — can't undo");
+      }
+      if (deleted === true) {
+        throw new Error("That batch was already undone");
+      }
+    }
+    logSheet.getRange(startRow, 10, rowCount, 1).setValue(true);
+    return jsonResponse({ success: true, playerNumber, playerName });
   } finally {
     lock.releaseLock();
   }

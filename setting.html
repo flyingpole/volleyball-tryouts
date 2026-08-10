@@ -4,13 +4,13 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
 <title>Setting — Volleyball Tryouts</title>
-<link rel="icon" href="assets/favicon.ico?v=8" sizes="any" />
-<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png?v=8" />
-<link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png?v=8" />
-<link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png?v=8" />
-<link rel="manifest" href="assets/site.webmanifest?v=8" />
+<link rel="icon" href="assets/favicon.ico?v=9" sizes="any" />
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png?v=9" />
+<link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png?v=9" />
+<link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png?v=9" />
+<link rel="manifest" href="assets/site.webmanifest?v=9" />
 <meta name="theme-color" content="#0b2545" />
-<link rel="stylesheet" href="styles.css?v=8" />
+<link rel="stylesheet" href="styles.css?v=9" />
 </head>
 <body>
 <div class="app evaluator-app">
@@ -51,16 +51,41 @@
       <button type="button" class="rail-btn rail-undo" id="undoBtn" disabled>UNDO</button>
       <div class="active-player-mini" id="activePlayerLabel">Load a group</div>
 
-      <button type="button" class="toggle rail-btn" id="btnFrontHit" data-result="Front" data-hit="true">Front Set<span class="pts">Hit ✓</span></button>
-      <button type="button" class="toggle rail-btn" id="btnFrontMiss" data-result="Front" data-hit="false">Front Set<span class="pts">Miss ✗</span></button>
-      <button type="button" class="toggle rail-btn" id="btnBackHit" data-result="Back" data-hit="true">Back Set<span class="pts">Hit ✓</span></button>
-      <button type="button" class="toggle rail-btn" id="btnBackMiss" data-result="Back" data-hit="false">Back Set<span class="pts">Miss ✗</span></button>
+      <div class="set-batch-card">
+        <div class="set-batch-label">Front</div>
+        <div class="set-batch-selects">
+          <select id="frontBallsSelect" class="rail-select" aria-label="Front sets tested">
+            <option value="5">5</option>
+            <option value="10" selected>10</option>
+            <option value="15">15</option>
+            <option value="20">20</option>
+            <option value="25">25</option>
+          </select>
+          <select id="frontMadeSelect" class="rail-select" aria-label="Front sets on target"></select>
+        </div>
+        <button type="button" class="rail-btn set-batch-submit" id="btnFrontSubmit" disabled>Log Front</button>
+      </div>
+
+      <div class="set-batch-card">
+        <div class="set-batch-label">Back</div>
+        <div class="set-batch-selects">
+          <select id="backBallsSelect" class="rail-select" aria-label="Back sets tested">
+            <option value="5">5</option>
+            <option value="10" selected>10</option>
+            <option value="15">15</option>
+            <option value="20">20</option>
+            <option value="25">25</option>
+          </select>
+          <select id="backMadeSelect" class="rail-select" aria-label="Back sets on target"></select>
+        </div>
+        <button type="button" class="rail-btn set-batch-submit" id="btnBackSubmit" disabled>Log Back</button>
+      </div>
     </div>
   </main>
 </div>
 
-<script src="config.js?v=8"></script>
-<script src="app.js?v=8"></script>
-<script src="setting.js?v=8"></script>
+<script src="config.js?v=9"></script>
+<script src="app.js?v=9"></script>
+<script src="setting.js?v=9"></script>
 </body>
 </html>

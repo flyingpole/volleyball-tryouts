@@ -19,6 +19,8 @@ function persistState() {
     activePlayerNumber: activePlayer() ? activePlayer().playerNumber : undefined,
     tallies: sessionTallies,
     undoStack,
+    frontBalls: els.frontBallsSelect.value,
+    backBalls: els.backBallsSelect.value,
   });
 }
 
@@ -30,14 +32,40 @@ const els = {
   activePlayerLabel: document.getElementById("activePlayerLabel"),
   undoBtn: document.getElementById("undoBtn"),
   toast: document.getElementById("toast"),
+  frontBallsSelect: document.getElementById("frontBallsSelect"),
+  frontMadeSelect: document.getElementById("frontMadeSelect"),
+  btnFrontSubmit: document.getElementById("btnFrontSubmit"),
+  backBallsSelect: document.getElementById("backBallsSelect"),
+  backMadeSelect: document.getElementById("backMadeSelect"),
+  btnBackSubmit: document.getElementById("btnBackSubmit"),
 };
 
-const scoreButtons = [
-  document.getElementById("btnFrontHit"),
-  document.getElementById("btnFrontMiss"),
-  document.getElementById("btnBackHit"),
-  document.getElementById("btnBackMiss"),
-];
+// Fills the "made" dropdown with 0..balls, keeping the current selection if
+// it's still in range (e.g. switching balls from 15 to 20 with "8" made
+// selected keeps "8"), otherwise resetting to 0.
+function populateMadeOptions(ballsSelect, madeSelect) {
+  const balls = parseInt(ballsSelect.value, 10);
+  const prev = madeSelect.value;
+  madeSelect.innerHTML = "";
+  for (let made = 0; made <= balls; made++) {
+    const opt = document.createElement("option");
+    opt.value = String(made);
+    opt.textContent = String(made);
+    madeSelect.appendChild(opt);
+  }
+  madeSelect.value = (prev !== "" && Number(prev) <= balls) ? prev : "0";
+}
+
+els.frontBallsSelect.addEventListener("change", () => {
+  populateMadeOptions(els.frontBallsSelect, els.frontMadeSelect);
+  persistState();
+});
+els.backBallsSelect.addEventListener("change", () => {
+  populateMadeOptions(els.backBallsSelect, els.backMadeSelect);
+  persistState();
+});
+populateMadeOptions(els.frontBallsSelect, els.frontMadeSelect);
+populateMadeOptions(els.backBallsSelect, els.backMadeSelect);
 
 function activePlayer() {
   return activeIndex === null ? null : visiblePlayers[activeIndex];
@@ -81,7 +109,12 @@ function refreshUI() {
     : (visiblePlayers.length ? "Tap a player" : "Load a group");
 
   const ready = !!p && isScriptConfigured();
-  scoreButtons.forEach((btn) => { btn.disabled = !ready; });
+  els.frontBallsSelect.disabled = !ready;
+  els.frontMadeSelect.disabled = !ready;
+  els.btnFrontSubmit.disabled = !ready;
+  els.backBallsSelect.disabled = !ready;
+  els.backMadeSelect.disabled = !ready;
+  els.btnBackSubmit.disabled = !ready;
 
   els.undoBtn.disabled = !undoStack.length || !isScriptConfigured();
   els.undoBtn.textContent = undoStack.length ? `UNDO (${undoStack.length})` : "UNDO";
@@ -225,6 +258,10 @@ async function init() {
     const savedState = loadJSON(STATE_KEY, null);
     if (savedState && savedState.tallies) sessionTallies = savedState.tallies;
     if (savedState && Array.isArray(savedState.undoStack)) undoStack = savedState.undoStack;
+    if (savedState && savedState.frontBalls) els.frontBallsSelect.value = savedState.frontBalls;
+    if (savedState && savedState.backBalls) els.backBallsSelect.value = savedState.backBalls;
+    populateMadeOptions(els.frontBallsSelect, els.frontMadeSelect);
+    populateMadeOptions(els.backBallsSelect, els.backMadeSelect);
 
     if (roster.length) {
       // No saved starting point yet (first-ever visit) — default to the
@@ -255,6 +292,10 @@ function resetPageState() {
   localStorage.removeItem(STATE_KEY);
   sessionTallies = {};
   undoStack = [];
+  els.frontBallsSelect.value = "10";
+  els.backBallsSelect.value = "10";
+  populateMadeOptions(els.frontBallsSelect, els.frontMadeSelect);
+  populateMadeOptions(els.backBallsSelect, els.backMadeSelect);
   if (roster.length) {
     loadGroup(Math.min(...roster.map((p) => Number(p.playerNumber))));
   } else {
@@ -266,13 +307,17 @@ function resetPageState() {
   setToast("Local data reset for this device.", false);
 }
 
-scoreButtons.forEach((btn) => {
-  btn.addEventListener("click", () => {
-    if (btn.disabled) return;
-    flashButton(btn);
-    hapticTap();
-    submitAttempt(btn.dataset.result, btn.dataset.hit === "true");
-  });
+els.btnFrontSubmit.addEventListener("click", () => {
+  if (els.btnFrontSubmit.disabled) return;
+  flashButton(els.btnFrontSubmit);
+  hapticTap();
+  submitBatch("Front");
+});
+els.btnBackSubmit.addEventListener("click", () => {
+  if (els.btnBackSubmit.disabled) return;
+  flashButton(els.btnBackSubmit);
+  hapticTap();
+  submitBatch("Back");
 });
 
 els.undoBtn.addEventListener("click", performUndo);
@@ -292,14 +337,16 @@ function pushUndoEntry(entry) {
   if (undoStack.length > MAX_UNDO) undoStack.length = MAX_UNDO;
 }
 
-// Every button IS the score (Hit = 1, Miss = 0), so there's no pending
-// selection step — tapping a button logs immediately. Unlike the other skill
-// pages, the active player does NOT auto-advance: players run several reps
-// in a row here, so the coach stays on the same player until they tap a
-// different row themselves. Updates state and the screen right away,
-// confirms with the server in the background, and rolls back only if the
-// server explicitly rejects it (see app.js postJSON).
-function submitAttempt(result, hitTarget) {
+// Logs a whole drill set at once — the fixed ball count and how many hit the
+// target for one side — instead of tapping each rep. No pending selection
+// step; tapping "Log Front"/"Log Back" submits immediately using whatever
+// the two dropdowns are currently set to. Unlike most other skill pages, the
+// active player does NOT auto-advance: a coach typically logs both Front and
+// Back for the same player before moving on, so auto-advancing after the
+// first submission would get in the way. Updates state and the screen right
+// away, confirms with the server in the background, and rolls back only if
+// the server explicitly rejects it (see app.js postJSON).
+function submitBatch(side) {
   const p = activePlayer();
   if (!p) return;
   const coach = els.coachSelect.value;
@@ -308,23 +355,29 @@ function submitAttempt(result, hitTarget) {
     return;
   }
 
-  const pts = hitTarget ? 1 : 0;
-  const label = `${result} Set ${hitTarget ? "Hit" : "Miss"}`;
+  const ballsSelect = side === "Front" ? els.frontBallsSelect : els.backBallsSelect;
+  const madeSelect = side === "Front" ? els.frontMadeSelect : els.backMadeSelect;
+  const balls = parseInt(ballsSelect.value, 10);
+  const made = parseInt(madeSelect.value, 10);
+  const label = `${side} ${made}/${balls}`;
 
-  adjustTally(p.playerNumber, 1, pts);
+  adjustTally(p.playerNumber, balls, made);
+  madeSelect.value = "0";
   renderRows();
   refreshUI();
   setToast(`✓ #${p.playerNumber} ${p.playerName} — ${label} (saving…)`, false);
   persistState();
 
-  postAttempt({ coach, playerNumber: p.playerNumber, playerName: p.playerName, skill: SKILL, result, hitTarget })
+  postSettingBatch({ coach, playerNumber: p.playerNumber, playerName: p.playerName, side, balls, made })
     .then((response) => {
       pushUndoEntry({
-        rowNumber: response.rowNumber,
+        startRow: response.startRow,
+        rowCount: response.rowCount,
         coach,
         playerNumber: p.playerNumber,
         playerName: p.playerName,
-        points: response.points ?? pts,
+        side,
+        made: response.made,
       });
       setToast(`✓ #${p.playerNumber} ${p.playerName} — ${label}`, false);
       refreshUI();
@@ -332,7 +385,7 @@ function submitAttempt(result, hitTarget) {
     })
     .catch((err) => {
       if (err.confirmed) {
-        adjustTally(p.playerNumber, -1, -pts);
+        adjustTally(p.playerNumber, -balls, -made);
         renderRows();
         setToast(`⚠ #${p.playerNumber} ${p.playerName} failed to save: ${err.message}`, true);
       } else {
@@ -346,22 +399,22 @@ function performUndo() {
   if (!undoStack.length) return;
   const undone = undoStack.shift();
 
-  adjustTally(undone.playerNumber, -1, -undone.points);
+  adjustTally(undone.playerNumber, -undone.rowCount, -undone.made);
   const idx = visiblePlayers.findIndex((p) => String(p.playerNumber) === String(undone.playerNumber));
   if (idx !== -1) activeIndex = idx;
   renderRows();
   refreshUI();
-  setToast(`↩ Undoing #${undone.playerNumber} ${undone.playerName}…`, false);
+  setToast(`↩ Undoing #${undone.playerNumber} ${undone.playerName}'s ${undone.side} batch…`, false);
   persistState();
 
-  postUndo({ coach: undone.coach, rowNumber: undone.rowNumber })
+  postUndoBatch({ coach: undone.coach, startRow: undone.startRow, rowCount: undone.rowCount })
     .then(() => {
-      setToast(`↩ Undid #${undone.playerNumber} ${undone.playerName}`, false);
+      setToast(`↩ Undid #${undone.playerNumber} ${undone.playerName}'s ${undone.side} ${undone.made}/${undone.rowCount}`, false);
     })
     .catch((err) => {
       if (err.confirmed) {
         undoStack.unshift(undone);
-        adjustTally(undone.playerNumber, 1, undone.points);
+        adjustTally(undone.playerNumber, undone.rowCount, undone.made);
         renderRows();
         refreshUI();
         setToast(`Couldn't undo: ${err.message}`, true);

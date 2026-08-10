@@ -152,12 +152,30 @@ visually even though their time rank looks good.
 
 ## How the Setting page works
 
-Same player list, jog wheel, and coach picker as the other pages, but **the
-active player does NOT auto-advance** — setters run several reps in a row, so
-the same player stays selected across taps until you tap a different row
-yourself. Four buttons — logging immediately:
+Same player list, jog wheel, and coach picker as the other pages, but scoring
+works differently: instead of tapping Hit/Miss for each individual set,
+you give a player a fixed number of balls to set and log how many landed on
+target as one batch. **The active player does NOT auto-advance** — a coach
+typically logs both Front and Back for the same player before moving on, so
+the same player stays selected until you tap a different row yourself.
 
-- **Front Hit ✓** / **Front Miss ✗** / **Back Hit ✓** / **Back Miss ✗**.
+There are two separate cards, one per side:
+
+1. Pick the **balls tested** (5/10/15/20/25 — defaults to 10, remembered on
+   this device until changed).
+2. Pick **how many hit the target** (0 up to whatever "balls tested" is set
+   to).
+3. Tap **Log Front** or **Log Back** to submit that whole batch at once. The
+   remainder (balls tested − made) is logged as misses automatically — you
+   never enter the miss count directly. The "made" dropdown resets to 0
+   after each submission; "balls tested" stays put for the next player.
+
+Behind the scenes this still writes one `Log` row per ball (a made row per
+hit, a missed row per miss), exactly like every other skill — only the
+frontend batches them into a single submission and a single **UNDO**, so
+`Summary Sheet`, coach tabs, and `Setting Rankings` all keep working
+unchanged. **UNDO** removes an entire batch (one whole Front or Back
+submission) at once, not one ball at a time.
 
 A player's Setting score is their overall hit rate (hits ÷ attempts, combining
 front and back). `Setting Rankings` additionally breaks it out into **Front

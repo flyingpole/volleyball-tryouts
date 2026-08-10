@@ -691,6 +691,53 @@ select {
   opacity: 0.5;
 }
 
+/* Setting's Front/Back batch cards: a fixed ball count + how many hit the
+   target, submitted as one drill set instead of tapping each rep. */
+.set-batch-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 5px 6px;
+  border-radius: 8px;
+  border: 2px solid var(--gray-light);
+  background: var(--bg);
+}
+
+.set-batch-label {
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: var(--navy);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.set-batch-selects {
+  display: flex;
+  gap: 4px;
+}
+
+.rail-select {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 6px 2px;
+  border-radius: 6px;
+  border: 2px solid #cdd6df;
+  background: white;
+  color: var(--text);
+}
+
+.rail-select:disabled {
+  opacity: 0.5;
+}
+
+.set-batch-submit {
+  min-height: 30px;
+  font-size: 0.72rem;
+}
+
 .quality-red.active {
   border-color: var(--red);
   background: var(--red);
