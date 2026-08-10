@@ -12,12 +12,13 @@ let sessionTallies = {}; // playerNumber -> { attempts, points }
 let undoStack = []; // most-recent-first, confirmed (server-acknowledged) attempts only, capped at MAX_UNDO
 let jogSettleTimer = null;
 let suppressJogSettle = false; // true while we're programmatically scrolling the jog wheel, so that scroll doesn't get misread as the user hunting for a player
-// playerNumber -> { Front?: {balls,made,quality}, Back?: {balls,made,quality} }
-// — the most recent batch logged for that player/side on THIS device this
-// session, so a coach can see (and the dropdowns pre-fill from) whether a
-// player already went. Not a full history: undoing a batch just clears the
-// entry for that side rather than restoring whatever batch came before it.
-let lastBatchBySide = {};
+const SKILL_STATUS_POLL_MS = 45000;
+// playerNumber -> { Front?: {balls,made,quality,...}, Back?: {...} } — live,
+// all-coaches data from the server (see fetchSkillStatus in app.js), not
+// local-device state. balls/made/quality reflect that side's most recent
+// batch (always one of the fixed dropdown options); totalBalls/totalMade/
+// avgQuality (unused here) are the cumulative stats Setting Rankings shows.
+let skillStatus = {};
 
 function persistState() {
   saveJSON(STATE_KEY, {
@@ -27,7 +28,6 @@ function persistState() {
     undoStack,
     frontBalls: els.frontBallsSelect.value,
     backBalls: els.backBallsSelect.value,
-    lastBatchBySide,
   });
 }
 
@@ -87,7 +87,11 @@ function renderRows() {
   visiblePlayers.forEach((p, idx) => {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "row-btn" + (idx === activeIndex ? " active" : "");
+    const status = skillStatus[p.playerNumber];
+    const alreadyLogged = status && (status.Front || status.Back);
+    btn.className = "row-btn"
+      + (idx === activeIndex ? " active" : "")
+      + (alreadyLogged ? " already-logged" : "");
 
     const label = document.createElement("span");
     label.textContent = `#${p.playerNumber} — ${p.playerName || "(unnamed)"}`;
@@ -107,6 +111,7 @@ function renderRows() {
 function selectPlayer(idx) {
   activeIndex = idx;
   renderRows();
+  applyBatchFieldState();
   refreshUI();
   persistState();
   if (activePlayer()) scrollJogToPlayer(activePlayer().playerNumber);
@@ -131,16 +136,18 @@ function refreshUI() {
 
   els.undoBtn.disabled = !undoStack.length || !isScriptConfigured();
   els.undoBtn.textContent = undoStack.length ? `UNDO (${undoStack.length})` : "UNDO";
-
-  applyBatchFieldState();
 }
 
-// Pre-fills each side's dropdowns from the active player's last logged
-// batch (if any) and highlights that card green — a coach jumping between
-// players can see at a glance who's already gone. If this player has no
-// logged batch for a side, the "made"/Quality dropdowns reset to their
-// defaults but "balls tested" is left alone (it's a sticky drill-setup
-// value shared across players, not per-player).
+// Pre-fills each side's dropdowns from the active player's live, all-coaches
+// last-logged batch (if any — see fetchSkillStatus) and highlights that card
+// green — a coach jumping between players can see at a glance who's already
+// gone, including batches other coaches logged from other devices. If this
+// player has no logged batch for a side, the "made"/Quality dropdowns reset
+// to their defaults but "balls tested" is left alone (it's a sticky
+// drill-setup value shared across players, not per-player). Called only at
+// points where the active player actually changes, or from the status poll
+// when nothing here is mid-edit — never unconditionally from refreshUI(),
+// which runs on plenty of triggers unrelated to switching players.
 function applyBatchFieldState() {
   const p = activePlayer();
   applySideFieldState(p, "Front", els.frontBallsSelect, els.frontMadeSelect, els.frontQualitySelect, els.frontBatchCard);
@@ -148,7 +155,7 @@ function applyBatchFieldState() {
 }
 
 function applySideFieldState(p, side, ballsSelect, madeSelect, qualitySelect, card) {
-  const saved = p && lastBatchBySide[p.playerNumber] && lastBatchBySide[p.playerNumber][side];
+  const saved = p && skillStatus[p.playerNumber] && skillStatus[p.playerNumber][side];
   if (saved) {
     ballsSelect.value = String(saved.balls);
     populateMadeOptions(ballsSelect, madeSelect);
@@ -161,6 +168,28 @@ function applySideFieldState(p, side, ballsSelect, madeSelect, qualitySelect, ca
     qualitySelect.value = "3";
     card.classList.remove("already-logged");
   }
+}
+
+// Any of the batch fields currently focused — used to skip a poll-triggered
+// refresh so it doesn't overwrite a dropdown the coach is mid-selecting.
+function isBatchFieldFocused() {
+  const fields = [
+    els.frontBallsSelect, els.frontMadeSelect, els.frontQualitySelect,
+    els.backBallsSelect, els.backMadeSelect, els.backQualitySelect,
+  ];
+  return fields.includes(document.activeElement);
+}
+
+// Polls the server for live skill status so another coach's submission (from
+// a different device) shows up here without a manual reload.
+async function refreshSkillStatus() {
+  try {
+    skillStatus = await fetchSkillStatus(SKILL);
+  } catch (err) {
+    return; // transient failure — keep showing whatever we last had
+  }
+  renderRows();
+  if (!isBatchFieldFocused()) applyBatchFieldState();
 }
 
 function setToast(message, isError) {
@@ -190,6 +219,7 @@ function loadGroup(start, preferredPlayerNumber, skipJogCenter) {
   }
   activeIndex = visiblePlayers.length ? idx : null;
   renderRows();
+  applyBatchFieldState();
   refreshUI();
   persistState();
   if (!skipJogCenter && activePlayer()) scrollJogToPlayer(activePlayer().playerNumber);
@@ -284,7 +314,9 @@ async function init() {
   }
 
   try {
-    const [coaches, players] = await Promise.all([fetchCoaches(), fetchRoster()]);
+    const [coaches, players, status] = await Promise.all([
+      fetchCoaches(), fetchRoster(), fetchSkillStatus(SKILL).catch(() => ({})),
+    ]);
     coaches.forEach((name) => {
       const opt = document.createElement("option");
       opt.value = name;
@@ -295,6 +327,9 @@ async function init() {
     if (savedCoach && coaches.includes(savedCoach)) els.coachSelect.value = savedCoach;
     updateHeaderCoach(els.coachSelect.value);
 
+    skillStatus = status;
+    setInterval(refreshSkillStatus, SKILL_STATUS_POLL_MS);
+
     roster = players;
     renderPlayerJog();
 
@@ -303,7 +338,6 @@ async function init() {
     if (savedState && Array.isArray(savedState.undoStack)) undoStack = savedState.undoStack;
     if (savedState && savedState.frontBalls) els.frontBallsSelect.value = savedState.frontBalls;
     if (savedState && savedState.backBalls) els.backBallsSelect.value = savedState.backBalls;
-    if (savedState && savedState.lastBatchBySide) lastBatchBySide = savedState.lastBatchBySide;
     populateMadeOptions(els.frontBallsSelect, els.frontMadeSelect);
     populateMadeOptions(els.backBallsSelect, els.backMadeSelect);
 
@@ -336,7 +370,6 @@ function resetPageState() {
   localStorage.removeItem(STATE_KEY);
   sessionTallies = {};
   undoStack = [];
-  lastBatchBySide = {};
   els.frontBallsSelect.value = "10";
   els.backBallsSelect.value = "10";
   els.frontQualitySelect.value = "3";
@@ -410,13 +443,16 @@ function submitBatch(side) {
   const quality = parseInt(qualitySelect.value, 10);
   const label = `${side} ${made}/${balls}, quality ${quality}`;
 
-  const prevBatch = lastBatchBySide[p.playerNumber] && lastBatchBySide[p.playerNumber][side];
-  lastBatchBySide[p.playerNumber] = lastBatchBySide[p.playerNumber] || {};
-  lastBatchBySide[p.playerNumber][side] = { balls, made, quality };
+  // Optimistic — shows instantly, corrected by refreshSkillStatus() once the
+  // server confirms (or discarded on failure, resyncing to whatever the
+  // server actually has).
+  skillStatus[p.playerNumber] = skillStatus[p.playerNumber] || {};
+  skillStatus[p.playerNumber][side] = { balls, made, quality };
 
   adjustTally(p.playerNumber, balls, made);
   renderRows();
-  refreshUI(); // pre-fills the dropdowns with what was just submitted and marks this side "already logged"
+  applyBatchFieldState(); // shows what was just submitted and marks this side "already logged"
+  refreshUI();
   setToast(`✓ #${p.playerNumber} ${p.playerName} — ${label} (saving…)`, false);
   persistState();
 
@@ -435,18 +471,17 @@ function submitBatch(side) {
       setToast(`✓ #${p.playerNumber} ${p.playerName} — ${label}`, false);
       refreshUI();
       persistState();
+      refreshSkillStatus();
     })
     .catch((err) => {
       if (err.confirmed) {
         adjustTally(p.playerNumber, -balls, -made);
-        if (prevBatch) lastBatchBySide[p.playerNumber][side] = prevBatch;
-        else delete lastBatchBySide[p.playerNumber][side];
         renderRows();
-        refreshUI();
         setToast(`⚠ #${p.playerNumber} ${p.playerName} failed to save: ${err.message}`, true);
       } else {
         setToast(`⚠ #${p.playerNumber} ${p.playerName}: couldn't confirm save (${err.message}). Check the Log sheet before re-scoring.`, true);
       }
+      refreshSkillStatus(); // discard the optimistic guess above, resync with the server's actual state
       persistState();
     });
 }
@@ -456,13 +491,10 @@ function performUndo() {
   const undone = undoStack.shift();
 
   adjustTally(undone.playerNumber, -undone.rowCount, -undone.made);
-  // Simplification, not a full history: this just clears the "already
-  // logged" flag for the side rather than restoring whatever batch (if any)
-  // came before it.
-  if (lastBatchBySide[undone.playerNumber]) delete lastBatchBySide[undone.playerNumber][undone.side];
   const idx = visiblePlayers.findIndex((p) => String(p.playerNumber) === String(undone.playerNumber));
   if (idx !== -1) activeIndex = idx;
   renderRows();
+  applyBatchFieldState();
   refreshUI();
   setToast(`↩ Undoing #${undone.playerNumber} ${undone.playerName}'s ${undone.side} batch…`, false);
   persistState();
@@ -470,14 +502,14 @@ function performUndo() {
   postUndoBatch({ coach: undone.coach, startRow: undone.startRow, rowCount: undone.rowCount })
     .then(() => {
       setToast(`↩ Undid #${undone.playerNumber} ${undone.playerName}'s ${undone.side} ${undone.made}/${undone.rowCount}`, false);
+      refreshSkillStatus(); // this side's status may have reverted to an earlier batch or cleared entirely
     })
     .catch((err) => {
       if (err.confirmed) {
         undoStack.unshift(undone);
         adjustTally(undone.playerNumber, undone.rowCount, undone.made);
-        lastBatchBySide[undone.playerNumber] = lastBatchBySide[undone.playerNumber] || {};
-        lastBatchBySide[undone.playerNumber][undone.side] = { balls: undone.rowCount, made: undone.made, quality: undone.quality };
         renderRows();
+        applyBatchFieldState();
         refreshUI();
         setToast(`Couldn't undo: ${err.message}`, true);
       } else {

@@ -13,6 +13,8 @@ let undoStack = []; // most-recent-first, confirmed (server-acknowledged) attemp
 let jogSettleTimer = null;
 let seedStart = null; // the start number a rotation began at; where it loops back to at roster's end
 let suppressJogSettle = false; // true while we're programmatically scrolling the jog wheel, so that scroll doesn't get misread as the user hunting for a player
+const SKILL_STATUS_POLL_MS = 45000;
+let skillStatus = {}; // playerNumber -> { avgTime, avgQuality, attempts } — live, all-coaches data from the server (see fetchSkillStatus in app.js)
 
 function persistState() {
   saveJSON(STATE_KEY, {
@@ -55,7 +57,9 @@ function renderRows() {
   visiblePlayers.forEach((p, idx) => {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "row-btn" + (idx === activeIndex ? " active" : "");
+    btn.className = "row-btn"
+      + (idx === activeIndex ? " active" : "")
+      + (skillStatus[p.playerNumber] ? " already-logged" : "");
 
     const label = document.createElement("span");
     label.textContent = `#${p.playerNumber} — ${p.playerName || "(unnamed)"}`;
@@ -75,9 +79,44 @@ function renderRows() {
 function selectPlayer(idx) {
   activeIndex = idx;
   renderRows();
+  applyBlockingStatus();
   refreshUI();
   persistState();
   if (activePlayer()) scrollJogToPlayer(activePlayer().playerNumber);
+}
+
+// Pre-fills the time field from this player's live, all-coaches average (if
+// any coach has already logged them on this skill) and highlights it green,
+// so a coach jumping between players can see who's already gone — including
+// attempts other coaches on other devices have submitted, refreshed by
+// refreshSkillStatus()'s poll. Called only at points where the active
+// player actually changes (never from refreshUI() itself, since timeInput's
+// own "input" listener also calls refreshUI() on every keystroke — hooking
+// this into refreshUI() would overwrite whatever the coach is mid-typing).
+function applyBlockingStatus() {
+  const p = activePlayer();
+  const status = p && skillStatus[p.playerNumber];
+  if (status) {
+    els.timeInput.value = status.avgTime.toFixed(2);
+    els.timeInput.classList.add("already-logged");
+  } else {
+    els.timeInput.value = "";
+    els.timeInput.classList.remove("already-logged");
+  }
+}
+
+// Polls the server for live skill status so another coach's submission (from
+// a different device) shows up here without a manual reload. Only touches
+// the active player's pre-filled value if they're not mid-edit (the field
+// isn't focused) — never interrupts a coach who's actively typing.
+async function refreshSkillStatus() {
+  try {
+    skillStatus = await fetchSkillStatus(SKILL);
+  } catch (err) {
+    return; // transient failure — keep showing whatever we last had
+  }
+  renderRows();
+  if (document.activeElement !== els.timeInput) applyBlockingStatus();
 }
 
 function refreshUI() {
@@ -125,6 +164,7 @@ function loadGroup(start, preferredPlayerNumber, reseed, skipJogCenter) {
   }
   activeIndex = visiblePlayers.length ? idx : null;
   renderRows();
+  applyBlockingStatus();
   refreshUI();
   persistState();
   if (!skipJogCenter && activePlayer()) scrollJogToPlayer(activePlayer().playerNumber);
@@ -242,7 +282,9 @@ async function init() {
   }
 
   try {
-    const [coaches, players] = await Promise.all([fetchCoaches(), fetchRoster()]);
+    const [coaches, players, status] = await Promise.all([
+      fetchCoaches(), fetchRoster(), fetchSkillStatus(SKILL).catch(() => ({})),
+    ]);
     coaches.forEach((name) => {
       const opt = document.createElement("option");
       opt.value = name;
@@ -252,6 +294,9 @@ async function init() {
     const savedCoach = getSavedCoach();
     if (savedCoach && coaches.includes(savedCoach)) els.coachSelect.value = savedCoach;
     updateHeaderCoach(els.coachSelect.value);
+
+    skillStatus = status;
+    setInterval(refreshSkillStatus, SKILL_STATUS_POLL_MS);
 
     roster = players;
     renderPlayerJog();
@@ -297,7 +342,6 @@ function resetPageState() {
   sessionTallies = {};
   undoStack = [];
   seedStart = null;
-  els.timeInput.value = "";
   if (roster.length) {
     loadGroup(Math.min(...roster.map((p) => Number(p.playerNumber))), undefined, true);
   } else {
@@ -361,8 +405,8 @@ function submitAttempt(result) {
   adjustTally(p.playerNumber, 1, 0);
   advanceAfterScore();
   if (activePlayer()) scrollJogToPlayer(activePlayer().playerNumber);
-  els.timeInput.value = "";
   renderRows();
+  applyBlockingStatus();
   refreshUI();
   setToast(`✓ #${p.playerNumber} ${p.playerName} — ${time}s ${result} (saving…)`, false);
   persistState();
@@ -379,6 +423,7 @@ function submitAttempt(result) {
       setToast(`✓ #${p.playerNumber} ${p.playerName} — ${time}s ${result}`, false);
       refreshUI();
       persistState();
+      refreshSkillStatus(); // this player's average may have shifted — pull it fresh rather than wait for the poll
     })
     .catch((err) => {
       if (err.confirmed) {
@@ -400,6 +445,7 @@ function performUndo() {
   const idx = visiblePlayers.findIndex((p) => String(p.playerNumber) === String(undone.playerNumber));
   if (idx !== -1) activeIndex = idx;
   renderRows();
+  applyBlockingStatus();
   refreshUI();
   setToast(`↩ Undoing #${undone.playerNumber} ${undone.playerName}…`, false);
   persistState();
@@ -407,12 +453,14 @@ function performUndo() {
   postUndo({ coach: undone.coach, rowNumber: undone.rowNumber })
     .then(() => {
       setToast(`↩ Undid #${undone.playerNumber} ${undone.playerName}`, false);
+      refreshSkillStatus(); // this player's average may have shifted — pull it fresh rather than approximate locally
     })
     .catch((err) => {
       if (err.confirmed) {
         undoStack.unshift(undone);
         adjustTally(undone.playerNumber, 1, 0);
         renderRows();
+        applyBlockingStatus();
         refreshUI();
         setToast(`Couldn't undo: ${err.message}`, true);
       } else {

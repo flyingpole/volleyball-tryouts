@@ -7,7 +7,7 @@
 // Manage deployments > Edit > New version > Deploy), open the Web app URL
 // directly in a browser with no query string — the JSON response's
 // "version" field should match this, confirming the redeploy actually took.
-const CODE_VERSION = "2026-07-26-setting-quality-score";
+const CODE_VERSION = "2026-07-27-live-skill-status";
 
 const SHEETS = {
   ROSTER: "Roster",
@@ -732,7 +732,86 @@ function doGet(e) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   if (action === "roster") return jsonResponse({ players: readRoster(ss) });
   if (action === "coaches") return jsonResponse({ coaches: COACHES });
+  if (action === "skillStatus") return jsonResponse({ status: computeSkillStatus(ss, e.parameter.skill) });
   return jsonResponse({ status: "ok", version: CODE_VERSION });
+}
+
+// Live, all-coaches "has this player already been evaluated on this skill"
+// status, read fresh from Log on every request (not cached) so one coach's
+// just-submitted attempt shows up for another coach's device on their next
+// poll. Blocking and Setting pages poll this and pre-fill/highlight their
+// input fields from it — see README's "already logged" sections. Only these
+// two skills have a persistent input field worth pre-filling (a time+quality
+// reading, or a balls/made/quality batch); Serving/Passing/Attacking are
+// simple tap-and-log buttons with nothing to pre-fill, so they're not
+// covered here — their player rows already show local attempt counts.
+function computeSkillStatus(ss, skill) {
+  const logSheet = ss.getSheetByName(SHEETS.LOG);
+  const lastRow = logSheet.getLastRow();
+  if (lastRow < 2) return {};
+  const rows = logSheet.getRange(2, 1, lastRow - 1, 10).getValues();
+
+  if (skill === "Blocking") {
+    const byPlayer = {};
+    rows.forEach((row) => {
+      const [, , playerNumber, , rowSkill, , , points, value2, deleted] = row;
+      if (rowSkill !== "Blocking" || deleted === true) return;
+      const key = String(playerNumber);
+      if (!byPlayer[key]) byPlayer[key] = { timeSum: 0, qualitySum: 0, attempts: 0 };
+      byPlayer[key].timeSum += Number(points) || 0;
+      byPlayer[key].qualitySum += Number(value2) || 0;
+      byPlayer[key].attempts += 1;
+    });
+    const result = {};
+    Object.keys(byPlayer).forEach((key) => {
+      const p = byPlayer[key];
+      result[key] = { avgTime: p.timeSum / p.attempts, avgQuality: p.qualitySum / p.attempts, attempts: p.attempts };
+    });
+    return result;
+  }
+
+  if (skill === "Setting") {
+    // Grouped by (player, side, timestamp) to reconstruct batch boundaries —
+    // handleSettingBatch writes every row in one batch with the exact same
+    // Date() instance, so rows sharing a timestamp came from the same
+    // submission. "last" is the most recent batch's own balls/made/quality
+    // (always one of the fixed dropdown options, unlike a cumulative total),
+    // so the frontend can pre-fill the balls/made dropdowns with it directly.
+    const byPlayer = {};
+    rows.forEach((row) => {
+      const [timestamp, , playerNumber, , rowSkill, side, , points, value2, deleted] = row;
+      if (rowSkill !== "Setting" || deleted === true) return;
+      if (side !== "Front" && side !== "Back") return;
+      const key = String(playerNumber);
+      if (!byPlayer[key]) byPlayer[key] = { Front: {}, Back: {} };
+      const batchKey = String(timestamp.getTime());
+      const batches = byPlayer[key][side];
+      if (!batches[batchKey]) batches[batchKey] = { time: timestamp.getTime(), balls: 0, made: 0, quality: value2 };
+      batches[batchKey].balls += 1;
+      batches[batchKey].made += Number(points) || 0;
+    });
+    const result = {};
+    Object.keys(byPlayer).forEach((key) => {
+      const sides = {};
+      ["Front", "Back"].forEach((side) => {
+        const batchList = Object.values(byPlayer[key][side]);
+        if (!batchList.length) return;
+        batchList.sort((a, b) => b.time - a.time);
+        const last = batchList[0];
+        const totalBalls = batchList.reduce((sum, b) => sum + b.balls, 0);
+        const totalMade = batchList.reduce((sum, b) => sum + b.made, 0);
+        const avgQuality = batchList.reduce((sum, b) => sum + b.quality, 0) / batchList.length;
+        sides[side] = {
+          balls: last.balls, made: last.made, quality: last.quality,
+          batches: batchList.length, totalBalls, totalMade, avgQuality,
+        };
+      });
+      result[key] = sides;
+    });
+    return result;
+  }
+
+  throw new Error(`Unsupported skill "${skill}" for status`);
 }
 
 function doPost(e) {

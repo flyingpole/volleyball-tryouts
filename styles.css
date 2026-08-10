@@ -424,6 +424,15 @@ select {
   white-space: nowrap;
 }
 
+/* Marks a player as already evaluated on this skill by ANY coach (live
+   server data, not just this device) — placed before .row-btn.active in
+   source order so the orange "currently selected" look still wins when a
+   row is both. */
+.row-btn.already-logged {
+  border-color: var(--green);
+  background: #e3f6ee;
+}
+
 .row-btn.active {
   border-color: var(--orange);
   background: var(--orange);
@@ -685,6 +694,13 @@ select {
   border: 2px solid #cdd6df;
   background: var(--bg);
   color: var(--text);
+}
+
+/* Pre-filled with this player's live average time — an already-evaluated
+   signal like Setting's .set-batch-card.already-logged. */
+.rail-time-input.already-logged {
+  border-color: var(--green);
+  background: #e3f6ee;
 }
 
 .rail-time-input:disabled {

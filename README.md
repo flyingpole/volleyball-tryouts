@@ -65,6 +65,29 @@ you open one of these pages (no saved state on that device yet), it loads
 starting from the lowest player number on the roster, so there's nothing to
 set up before scoring the first player.
 
+## "Already logged" (Blocking and Setting only)
+
+These two skills have a persistent input field worth pre-filling (a
+time+quality reading, or a balls/made/quality batch) — Serving, Passing,
+Attacking, and Digging are simple tap-and-log buttons with nothing to
+pre-fill, so they don't have this; their player rows just show this
+device's local attempt counts, same as always. Game Play is excluded too,
+since multiple coaches are meant to add running +/- log entries for the
+same on-court player, not evaluate them once.
+
+On Blocking and Setting, the app polls the Web App every 45 seconds for a
+live, all-coaches view of who's already been evaluated on that skill —
+`?action=skillStatus&skill=Blocking` or `...=Setting` reads `Log` fresh on
+every request and returns each player's aggregated result (see
+`computeSkillStatus()` in `Code.gs`). This is why a coach on one phone can
+see that a *different* coach, on a *different* device, already ran a player
+through blocking or setting — it's not limited to what this device itself
+has logged. A poll never overwrites a field you're actively editing (typing
+in Blocking's time field, or with focus in one of Setting's dropdowns) —
+it'll pick up on the next poll once you're done. Logging or undoing your own
+attempt also triggers an immediate refresh, rather than waiting for the next
+scheduled poll.
+
 ## How the Serving page works
 
 1. The app loads automatically, starting from the lowest player number on
@@ -150,6 +173,14 @@ Worst Time and Attempts, plus an **Avg Quality** column shaded on a
 red→yellow→green gradient — a fast player with weak technique stands out
 visually even though their time rank looks good.
 
+**A player's row (and the time field, once selected) turns green if ANY
+coach has already logged them on this skill** — the time field pre-fills
+with their average time across every attempt, averaging in a new one each
+time more than one exists. This is live, server-side data (see "Already
+logged" below), not just what this device has seen — it's how a second
+coach knows a player's already been through the blocking circuit even if a
+different coach ran it.
+
 ## How the Setting page works
 
 Same player list, jog wheel, and coach picker as the other pages, but scoring
@@ -173,12 +204,14 @@ There are two separate cards, **Front Sets** and **Back Sets**:
    from this player's own last logged batch for that side if they already
    have one (see below), or reset to their defaults (0 and 3) if not.
 
-**A card turns green once its side has been logged for the active player** —
-an at-a-glance "did this player already go" signal as you jump between
-players (tapping a row, scrolling the jog wheel). The dropdowns stay fully
-editable even while green; logging a new batch for that side just updates
-what's shown. This is per-device, session-only — it tracks batches logged
-from this browser this session, not a live lookup of the whole Sheet.
+**A player's row, and a side's card, turns green once ANY coach has already
+logged that side for them** — an at-a-glance "did this player already go"
+signal as you jump between players (tapping a row, scrolling the jog wheel),
+covering every coach's device, not just this one (see "Already logged"
+below). The card pre-fills from that side's most recent batch — always one
+of the fixed dropdown options, so it's directly re-submittable if you need
+to log another set. The dropdowns stay fully editable even while green;
+logging a new batch for that side just updates what's shown.
 
 Behind the scenes this still writes one `Log` row per ball (a made row per
 hit, a missed row per miss, every row in the batch carrying the same Quality

@@ -135,6 +135,18 @@ async function fetchCoaches() {
   return data.coaches || [];
 }
 
+// Live, all-coaches "who's already been evaluated on this skill" data —
+// used by Blocking and Setting to pre-fill/highlight their input fields.
+// Callers poll this periodically; a failure here should just skip that
+// refresh rather than interrupt scoring, so callers should catch it
+// themselves rather than let it propagate into the main init() error path.
+async function fetchSkillStatus(skill) {
+  const res = await fetch(`${CONFIG.SCRIPT_URL}?action=skillStatus&skill=${encodeURIComponent(skill)}`);
+  if (!res.ok) throw new Error(`Skill status fetch failed (${res.status})`);
+  const data = await res.json();
+  return data.status || {};
+}
+
 // Apps Script Web Apps don't send CORS headers for JSON content types,
 // so we POST as text/plain (the default) to avoid a preflight request.
 // doPost() on the server reads e.postData.contents and JSON.parses it.
