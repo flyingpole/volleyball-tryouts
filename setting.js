@@ -12,6 +12,12 @@ let sessionTallies = {}; // playerNumber -> { attempts, points }
 let undoStack = []; // most-recent-first, confirmed (server-acknowledged) attempts only, capped at MAX_UNDO
 let jogSettleTimer = null;
 let suppressJogSettle = false; // true while we're programmatically scrolling the jog wheel, so that scroll doesn't get misread as the user hunting for a player
+// playerNumber -> { Front?: {balls,made,quality}, Back?: {balls,made,quality} }
+// — the most recent batch logged for that player/side on THIS device this
+// session, so a coach can see (and the dropdowns pre-fill from) whether a
+// player already went. Not a full history: undoing a batch just clears the
+// entry for that side rather than restoring whatever batch came before it.
+let lastBatchBySide = {};
 
 function persistState() {
   saveJSON(STATE_KEY, {
@@ -21,6 +27,7 @@ function persistState() {
     undoStack,
     frontBalls: els.frontBallsSelect.value,
     backBalls: els.backBallsSelect.value,
+    lastBatchBySide,
   });
 }
 
@@ -32,10 +39,12 @@ const els = {
   activePlayerLabel: document.getElementById("activePlayerLabel"),
   undoBtn: document.getElementById("undoBtn"),
   toast: document.getElementById("toast"),
+  frontBatchCard: document.getElementById("frontBatchCard"),
   frontBallsSelect: document.getElementById("frontBallsSelect"),
   frontMadeSelect: document.getElementById("frontMadeSelect"),
   frontQualitySelect: document.getElementById("frontQualitySelect"),
   btnFrontSubmit: document.getElementById("btnFrontSubmit"),
+  backBatchCard: document.getElementById("backBatchCard"),
   backBallsSelect: document.getElementById("backBallsSelect"),
   backMadeSelect: document.getElementById("backMadeSelect"),
   backQualitySelect: document.getElementById("backQualitySelect"),
@@ -122,6 +131,36 @@ function refreshUI() {
 
   els.undoBtn.disabled = !undoStack.length || !isScriptConfigured();
   els.undoBtn.textContent = undoStack.length ? `UNDO (${undoStack.length})` : "UNDO";
+
+  applyBatchFieldState();
+}
+
+// Pre-fills each side's dropdowns from the active player's last logged
+// batch (if any) and highlights that card green — a coach jumping between
+// players can see at a glance who's already gone. If this player has no
+// logged batch for a side, the "made"/Quality dropdowns reset to their
+// defaults but "balls tested" is left alone (it's a sticky drill-setup
+// value shared across players, not per-player).
+function applyBatchFieldState() {
+  const p = activePlayer();
+  applySideFieldState(p, "Front", els.frontBallsSelect, els.frontMadeSelect, els.frontQualitySelect, els.frontBatchCard);
+  applySideFieldState(p, "Back", els.backBallsSelect, els.backMadeSelect, els.backQualitySelect, els.backBatchCard);
+}
+
+function applySideFieldState(p, side, ballsSelect, madeSelect, qualitySelect, card) {
+  const saved = p && lastBatchBySide[p.playerNumber] && lastBatchBySide[p.playerNumber][side];
+  if (saved) {
+    ballsSelect.value = String(saved.balls);
+    populateMadeOptions(ballsSelect, madeSelect);
+    madeSelect.value = String(saved.made);
+    qualitySelect.value = String(saved.quality);
+    card.classList.add("already-logged");
+  } else {
+    populateMadeOptions(ballsSelect, madeSelect);
+    madeSelect.value = "0";
+    qualitySelect.value = "3";
+    card.classList.remove("already-logged");
+  }
 }
 
 function setToast(message, isError) {
@@ -264,6 +303,7 @@ async function init() {
     if (savedState && Array.isArray(savedState.undoStack)) undoStack = savedState.undoStack;
     if (savedState && savedState.frontBalls) els.frontBallsSelect.value = savedState.frontBalls;
     if (savedState && savedState.backBalls) els.backBallsSelect.value = savedState.backBalls;
+    if (savedState && savedState.lastBatchBySide) lastBatchBySide = savedState.lastBatchBySide;
     populateMadeOptions(els.frontBallsSelect, els.frontMadeSelect);
     populateMadeOptions(els.backBallsSelect, els.backMadeSelect);
 
@@ -296,6 +336,7 @@ function resetPageState() {
   localStorage.removeItem(STATE_KEY);
   sessionTallies = {};
   undoStack = [];
+  lastBatchBySide = {};
   els.frontBallsSelect.value = "10";
   els.backBallsSelect.value = "10";
   els.frontQualitySelect.value = "3";
@@ -369,11 +410,13 @@ function submitBatch(side) {
   const quality = parseInt(qualitySelect.value, 10);
   const label = `${side} ${made}/${balls}, quality ${quality}`;
 
+  const prevBatch = lastBatchBySide[p.playerNumber] && lastBatchBySide[p.playerNumber][side];
+  lastBatchBySide[p.playerNumber] = lastBatchBySide[p.playerNumber] || {};
+  lastBatchBySide[p.playerNumber][side] = { balls, made, quality };
+
   adjustTally(p.playerNumber, balls, made);
-  madeSelect.value = "0";
-  qualitySelect.value = "3";
   renderRows();
-  refreshUI();
+  refreshUI(); // pre-fills the dropdowns with what was just submitted and marks this side "already logged"
   setToast(`✓ #${p.playerNumber} ${p.playerName} — ${label} (saving…)`, false);
   persistState();
 
@@ -387,6 +430,7 @@ function submitBatch(side) {
         playerName: p.playerName,
         side,
         made: response.made,
+        quality,
       });
       setToast(`✓ #${p.playerNumber} ${p.playerName} — ${label}`, false);
       refreshUI();
@@ -395,7 +439,10 @@ function submitBatch(side) {
     .catch((err) => {
       if (err.confirmed) {
         adjustTally(p.playerNumber, -balls, -made);
+        if (prevBatch) lastBatchBySide[p.playerNumber][side] = prevBatch;
+        else delete lastBatchBySide[p.playerNumber][side];
         renderRows();
+        refreshUI();
         setToast(`⚠ #${p.playerNumber} ${p.playerName} failed to save: ${err.message}`, true);
       } else {
         setToast(`⚠ #${p.playerNumber} ${p.playerName}: couldn't confirm save (${err.message}). Check the Log sheet before re-scoring.`, true);
@@ -409,6 +456,10 @@ function performUndo() {
   const undone = undoStack.shift();
 
   adjustTally(undone.playerNumber, -undone.rowCount, -undone.made);
+  // Simplification, not a full history: this just clears the "already
+  // logged" flag for the side rather than restoring whatever batch (if any)
+  // came before it.
+  if (lastBatchBySide[undone.playerNumber]) delete lastBatchBySide[undone.playerNumber][undone.side];
   const idx = visiblePlayers.findIndex((p) => String(p.playerNumber) === String(undone.playerNumber));
   if (idx !== -1) activeIndex = idx;
   renderRows();
@@ -424,6 +475,8 @@ function performUndo() {
       if (err.confirmed) {
         undoStack.unshift(undone);
         adjustTally(undone.playerNumber, undone.rowCount, undone.made);
+        lastBatchBySide[undone.playerNumber] = lastBatchBySide[undone.playerNumber] || {};
+        lastBatchBySide[undone.playerNumber][undone.side] = { balls: undone.rowCount, made: undone.made, quality: undone.quality };
         renderRows();
         refreshUI();
         setToast(`Couldn't undo: ${err.message}`, true);

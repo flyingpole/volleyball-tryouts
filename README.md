@@ -159,20 +159,26 @@ target as one batch. **The active player does NOT auto-advance** — a coach
 typically logs both Front and Back for the same player before moving on, so
 the same player stays selected until you tap a different row yourself.
 
-There are two separate cards, one per side:
+There are two separate cards, **Front Sets** and **Back Sets**:
 
-1. Pick the **balls tested** (5/10/15/20/25 — defaults to 10, remembered on
-   this device until changed).
-2. Pick **how many hit the target** (0 up to whatever "balls tested" is set
-   to).
-3. Pick a **Quality** rating (0-5, defaults to 3) — the coach's subjective
+1. Pick **how many hit the target**, then **of** how many **balls tested**
+   (5/10/15/20/25 — defaults to 10, remembered on this device until
+   changed) — e.g. "8 of 10". The remainder (balls tested − made) is logged
+   as misses automatically; you never enter the miss count directly.
+2. Pick a **Quality** rating (0-5, defaults to 3) — the coach's subjective
    read on technique/form for that batch, independent of how many landed on
    target.
-4. Tap **Log Front** or **Log Back** to submit that whole batch at once. The
-   remainder (balls tested − made) is logged as misses automatically — you
-   never enter the miss count directly. The "made" and "Quality" dropdowns
-   reset to their defaults after each submission; "balls tested" stays put
-   for the next player.
+3. Tap **Log Front** or **Log Back** to submit that whole batch at once.
+   "Balls tested" stays put for the next player; "made" and "Quality" pre-fill
+   from this player's own last logged batch for that side if they already
+   have one (see below), or reset to their defaults (0 and 3) if not.
+
+**A card turns green once its side has been logged for the active player** —
+an at-a-glance "did this player already go" signal as you jump between
+players (tapping a row, scrolling the jog wheel). The dropdowns stay fully
+editable even while green; logging a new batch for that side just updates
+what's shown. This is per-device, session-only — it tracks batches logged
+from this browser this session, not a live lookup of the whole Sheet.
 
 Behind the scenes this still writes one `Log` row per ball (a made row per
 hit, a missed row per miss, every row in the batch carrying the same Quality

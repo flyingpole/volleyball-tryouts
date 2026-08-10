@@ -703,6 +703,14 @@ select {
   background: var(--bg);
 }
 
+/* Marks a side as already logged for whichever player is active — an
+   at-a-glance "did this player already go" signal, independent of whatever
+   the dropdowns currently show (they stay editable). */
+.set-batch-card.already-logged {
+  border-color: var(--green);
+  background: #e3f6ee;
+}
+
 .set-batch-label {
   font-size: 0.65rem;
   font-weight: 800;
@@ -713,7 +721,15 @@ select {
 
 .set-batch-selects {
   display: flex;
+  align-items: center;
   gap: 4px;
+}
+
+.set-batch-of {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--gray);
 }
 
 .set-batch-quality-row {
