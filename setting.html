@@ -4,13 +4,13 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
 <title>Setting — Volleyball Tryouts</title>
-<link rel="icon" href="assets/favicon.ico?v=9" sizes="any" />
-<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png?v=9" />
-<link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png?v=9" />
-<link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png?v=9" />
-<link rel="manifest" href="assets/site.webmanifest?v=9" />
+<link rel="icon" href="assets/favicon.ico?v=10" sizes="any" />
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png?v=10" />
+<link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png?v=10" />
+<link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png?v=10" />
+<link rel="manifest" href="assets/site.webmanifest?v=10" />
 <meta name="theme-color" content="#0b2545" />
-<link rel="stylesheet" href="styles.css?v=9" />
+<link rel="stylesheet" href="styles.css?v=10" />
 </head>
 <body>
 <div class="app evaluator-app">
@@ -63,6 +63,17 @@
           </select>
           <select id="frontMadeSelect" class="rail-select" aria-label="Front sets on target"></select>
         </div>
+        <div class="set-batch-quality-row">
+          <label for="frontQualitySelect" class="set-batch-quality-label">Quality</label>
+          <select id="frontQualitySelect" class="rail-select" aria-label="Front set quality (0-5)">
+            <option value="0">0</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3" selected>3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+          </select>
+        </div>
         <button type="button" class="rail-btn set-batch-submit" id="btnFrontSubmit" disabled>Log Front</button>
       </div>
 
@@ -78,14 +89,25 @@
           </select>
           <select id="backMadeSelect" class="rail-select" aria-label="Back sets on target"></select>
         </div>
+        <div class="set-batch-quality-row">
+          <label for="backQualitySelect" class="set-batch-quality-label">Quality</label>
+          <select id="backQualitySelect" class="rail-select" aria-label="Back set quality (0-5)">
+            <option value="0">0</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3" selected>3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+          </select>
+        </div>
         <button type="button" class="rail-btn set-batch-submit" id="btnBackSubmit" disabled>Log Back</button>
       </div>
     </div>
   </main>
 </div>
 
-<script src="config.js?v=9"></script>
-<script src="app.js?v=9"></script>
-<script src="setting.js?v=9"></script>
+<script src="config.js?v=10"></script>
+<script src="app.js?v=10"></script>
+<script src="setting.js?v=10"></script>
 </body>
 </html>

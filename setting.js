@@ -34,9 +34,11 @@ const els = {
   toast: document.getElementById("toast"),
   frontBallsSelect: document.getElementById("frontBallsSelect"),
   frontMadeSelect: document.getElementById("frontMadeSelect"),
+  frontQualitySelect: document.getElementById("frontQualitySelect"),
   btnFrontSubmit: document.getElementById("btnFrontSubmit"),
   backBallsSelect: document.getElementById("backBallsSelect"),
   backMadeSelect: document.getElementById("backMadeSelect"),
+  backQualitySelect: document.getElementById("backQualitySelect"),
   btnBackSubmit: document.getElementById("btnBackSubmit"),
 };
 
@@ -111,9 +113,11 @@ function refreshUI() {
   const ready = !!p && isScriptConfigured();
   els.frontBallsSelect.disabled = !ready;
   els.frontMadeSelect.disabled = !ready;
+  els.frontQualitySelect.disabled = !ready;
   els.btnFrontSubmit.disabled = !ready;
   els.backBallsSelect.disabled = !ready;
   els.backMadeSelect.disabled = !ready;
+  els.backQualitySelect.disabled = !ready;
   els.btnBackSubmit.disabled = !ready;
 
   els.undoBtn.disabled = !undoStack.length || !isScriptConfigured();
@@ -294,6 +298,8 @@ function resetPageState() {
   undoStack = [];
   els.frontBallsSelect.value = "10";
   els.backBallsSelect.value = "10";
+  els.frontQualitySelect.value = "3";
+  els.backQualitySelect.value = "3";
   populateMadeOptions(els.frontBallsSelect, els.frontMadeSelect);
   populateMadeOptions(els.backBallsSelect, els.backMadeSelect);
   if (roster.length) {
@@ -357,18 +363,21 @@ function submitBatch(side) {
 
   const ballsSelect = side === "Front" ? els.frontBallsSelect : els.backBallsSelect;
   const madeSelect = side === "Front" ? els.frontMadeSelect : els.backMadeSelect;
+  const qualitySelect = side === "Front" ? els.frontQualitySelect : els.backQualitySelect;
   const balls = parseInt(ballsSelect.value, 10);
   const made = parseInt(madeSelect.value, 10);
-  const label = `${side} ${made}/${balls}`;
+  const quality = parseInt(qualitySelect.value, 10);
+  const label = `${side} ${made}/${balls}, quality ${quality}`;
 
   adjustTally(p.playerNumber, balls, made);
   madeSelect.value = "0";
+  qualitySelect.value = "3";
   renderRows();
   refreshUI();
   setToast(`✓ #${p.playerNumber} ${p.playerName} — ${label} (saving…)`, false);
   persistState();
 
-  postSettingBatch({ coach, playerNumber: p.playerNumber, playerName: p.playerName, side, balls, made })
+  postSettingBatch({ coach, playerNumber: p.playerNumber, playerName: p.playerName, side, balls, made, quality })
     .then((response) => {
       pushUndoEntry({
         startRow: response.startRow,

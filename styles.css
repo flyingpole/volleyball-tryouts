@@ -716,6 +716,22 @@ select {
   gap: 4px;
 }
 
+.set-batch-quality-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.set-batch-quality-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--gray);
+}
+
+.set-batch-quality-row .rail-select {
+  flex: 0 0 52px;
+}
+
 .rail-select {
   flex: 1;
   min-width: 0;

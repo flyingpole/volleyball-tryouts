@@ -7,7 +7,7 @@
 // Manage deployments > Edit > New version > Deploy), open the Web app URL
 // directly in a browser with no query string — the JSON response's
 // "version" field should match this, confirming the redeploy actually took.
-const CODE_VERSION = "2026-07-26-setting-fixed-ball-batches";
+const CODE_VERSION = "2026-07-26-setting-quality-score";
 
 const SHEETS = {
   ROSTER: "Roster",
@@ -543,7 +543,7 @@ function buildBlockingRankingsSheet(sheet, dataSheetName) {
 // hit, 0 for a miss, so AVERAGEIFS on Points already IS the hit rate).
 function buildSettingRankingsSheet(sheet, summaryColLetter) {
   sheet.clear();
-  sheet.getRange(1, 1, ROSTER_MAX_ROWS + 5, 14).clearDataValidations();
+  sheet.getRange(1, 1, ROSTER_MAX_ROWS + 5, 20).clearDataValidations();
   sheet.getRange("A1").setValue("Position filter:").setFontWeight("bold");
   sheet.getRange("B1").setValue("All");
   const rule = SpreadsheetApp.newDataValidation()
@@ -551,7 +551,10 @@ function buildSettingRankingsSheet(sheet, summaryColLetter) {
     .build();
   sheet.getRange("B1").setDataValidation(rule);
 
-  const headers = ["Rank", "Player #", "Name", "Positions", "Grade", "Overall %", "Front %", "Back %", "Attempts", "Coaches", "Flag"];
+  const headers = [
+    "Rank", "Player #", "Name", "Positions", "Grade", "Overall %", "Front %", "Back %", "Attempts", "Coaches", "Flag",
+    "Front Made", "Front Avg Quality", "Front Set Score", "Back Made", "Back Avg Quality", "Back Set Score",
+  ];
   sheet.getRange(3, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setWrap(true).setHorizontalAlignment("center");
   sheet.setFrozenRows(3);
 
@@ -568,6 +571,16 @@ function buildSettingRankingsSheet(sheet, summaryColLetter) {
   );
 
   const colA = [], colG = [], colH = [], colI = [], colJ = [], colK = [];
+  // Front/Back Made + Avg Quality + Set Score (made + avg quality) — a
+  // supplementary stat alongside the hit-rate-based Overall %/Front %/Back %
+  // that actually drives ranking, same non-ranking role Blocking's Avg
+  // Quality plays. Made is a cumulative SUMIFS over every batch ever logged
+  // for that side (Points is 1 per made ball), and Avg Quality averages the
+  // coach's 0-5 rating across every ball row in those batches (each batch
+  // writes the same rating across all its rows — see handleSettingBatch —
+  // so a bigger batch counts proportionally more toward the average, same
+  // as Blocking's per-attempt Avg Quality).
+  const colL = [], colM = [], colN = [], colO = [], colP = [], colQ = [];
   for (let i = 0; i < ROSTER_MAX_ROWS; i++) {
     const r = 4 + i;
     colA.push([`=IF(B${r}="","",ROW()-3)`]);
@@ -576,6 +589,16 @@ function buildSettingRankingsSheet(sheet, summaryColLetter) {
     colI.push([`=IF(B${r}="","",COUNTIFS(Log!$C:$C,B${r},Log!$E:$E,"Setting",Log!$J:$J,"<>TRUE"))`]);
     colJ.push([`=IF(B${r}="","",IFERROR(COUNTA(UNIQUE(FILTER(Log!$B:$B,Log!$C:$C=B${r},Log!$E:$E="Setting",Log!$J:$J<>true))),0))`]);
     colK.push([`=IF(B${r}="","",IFERROR(IF(OR(I${r}<${FLAG_MIN_ATTEMPTS},J${r}<${FLAG_MIN_COACHES},ABS(F${r}-F${r + 1})<${FLAG_SCORE_GAP}),"⚠ Needs more looks",""),""))`]);
+
+    const frontCriteria = `Log!$C:$C,B${r},Log!$E:$E,"Setting",Log!$F:$F,"Front",Log!$J:$J,"<>TRUE"`;
+    colL.push([`=IF(B${r}="","",IF(COUNTIFS(${frontCriteria})=0,"",SUMIFS(Log!$H:$H,${frontCriteria})))`]);
+    colM.push([`=IF(B${r}="","",IFERROR(AVERAGEIFS(Log!$I:$I,${frontCriteria}),""))`]);
+    colN.push([`=IF(OR(L${r}="",M${r}=""),"",L${r}+M${r})`]);
+
+    const backCriteria = `Log!$C:$C,B${r},Log!$E:$E,"Setting",Log!$F:$F,"Back",Log!$J:$J,"<>TRUE"`;
+    colO.push([`=IF(B${r}="","",IF(COUNTIFS(${backCriteria})=0,"",SUMIFS(Log!$H:$H,${backCriteria})))`]);
+    colP.push([`=IF(B${r}="","",IFERROR(AVERAGEIFS(Log!$I:$I,${backCriteria}),""))`]);
+    colQ.push([`=IF(OR(O${r}="",P${r}=""),"",O${r}+P${r})`]);
   }
   sheet.getRange(4, 1, ROSTER_MAX_ROWS, 1).setFormulas(colA);
   sheet.getRange(4, 7, ROSTER_MAX_ROWS, 1).setFormulas(colG);
@@ -583,6 +606,12 @@ function buildSettingRankingsSheet(sheet, summaryColLetter) {
   sheet.getRange(4, 9, ROSTER_MAX_ROWS, 1).setFormulas(colI);
   sheet.getRange(4, 10, ROSTER_MAX_ROWS, 1).setFormulas(colJ);
   sheet.getRange(4, 11, ROSTER_MAX_ROWS, 1).setFormulas(colK);
+  sheet.getRange(4, 12, ROSTER_MAX_ROWS, 1).setFormulas(colL);
+  sheet.getRange(4, 13, ROSTER_MAX_ROWS, 1).setFormulas(colM);
+  sheet.getRange(4, 14, ROSTER_MAX_ROWS, 1).setFormulas(colN);
+  sheet.getRange(4, 15, ROSTER_MAX_ROWS, 1).setFormulas(colO);
+  sheet.getRange(4, 16, ROSTER_MAX_ROWS, 1).setFormulas(colP);
+  sheet.getRange(4, 17, ROSTER_MAX_ROWS, 1).setFormulas(colQ);
 }
 
 // Ranked by total points descending (Summary Sheet's SUMIFS column, same
@@ -799,19 +828,23 @@ function handleUndo(ss, body) {
   }
 }
 
-// Setting logs a whole batch of balls at once: a fixed count (5/10/15/20/25)
-// and how many hit the target, for one side (Front or Back). Rather than
-// changing the Log schema, this just writes `balls` individual rows in one
-// shot — `made` rows with hitTarget=true, the rest with hitTarget=false —
-// so every other formula (Summary Sheet, coach tabs, Setting Rankings) keeps
-// working unchanged; they already average one row per attempt. Returns the
-// contiguous row range so the frontend can undo the whole batch as one unit.
+// Setting logs a whole batch of balls at once: a fixed count (5/10/15/20/25),
+// how many hit the target, and a 0-5 set-quality rating, for one side (Front
+// or Back). Rather than changing the Log schema, this just writes `balls`
+// individual rows in one shot — `made` rows with hitTarget=true, the rest
+// with hitTarget=false, every row carrying the same quality rating in Value
+// 2 (same column Blocking's per-attempt quality uses) — so every other
+// formula (Summary Sheet, coach tabs, Setting Rankings' hit-rate columns)
+// keeps working unchanged; they already average one row per attempt. Returns
+// the contiguous row range so the frontend can undo the whole batch as one
+// unit.
 function handleSettingBatch(ss, body) {
   const coach = String(body.coach || "").trim();
   const playerNumber = String(body.playerNumber || "").trim();
   const side = String(body.side || "").trim();
   const balls = parseInt(body.balls, 10);
   const made = parseInt(body.made, 10);
+  const quality = parseInt(body.quality, 10);
   if (!coach || !playerNumber || !side) {
     throw new Error("Missing coach, playerNumber, or side");
   }
@@ -823,6 +856,9 @@ function handleSettingBatch(ss, body) {
   }
   if (!Number.isInteger(made) || made < 0 || made > balls) {
     throw new Error(`Invalid made count "${body.made}"`);
+  }
+  if (!Number.isInteger(quality) || quality < 0 || quality > 5) {
+    throw new Error(`Invalid quality "${body.quality}"`);
   }
   const missed = balls - made;
   const hitPoints = computeSettingScore(side, true);
@@ -837,10 +873,10 @@ function handleSettingBatch(ss, body) {
     const timestamp = new Date();
     const rows = [];
     for (let i = 0; i < made; i++) {
-      rows.push([timestamp, coach, playerNumber, playerName, "Setting", side, true, hitPoints, null, false]);
+      rows.push([timestamp, coach, playerNumber, playerName, "Setting", side, true, hitPoints, quality, false]);
     }
     for (let i = 0; i < missed; i++) {
-      rows.push([timestamp, coach, playerNumber, playerName, "Setting", side, false, missPoints, null, false]);
+      rows.push([timestamp, coach, playerNumber, playerName, "Setting", side, false, missPoints, quality, false]);
     }
     startRow = logSheet.getLastRow() + 1;
     if (rows.length) {

@@ -165,22 +165,33 @@ There are two separate cards, one per side:
    this device until changed).
 2. Pick **how many hit the target** (0 up to whatever "balls tested" is set
    to).
-3. Tap **Log Front** or **Log Back** to submit that whole batch at once. The
+3. Pick a **Quality** rating (0-5, defaults to 3) — the coach's subjective
+   read on technique/form for that batch, independent of how many landed on
+   target.
+4. Tap **Log Front** or **Log Back** to submit that whole batch at once. The
    remainder (balls tested − made) is logged as misses automatically — you
-   never enter the miss count directly. The "made" dropdown resets to 0
-   after each submission; "balls tested" stays put for the next player.
+   never enter the miss count directly. The "made" and "Quality" dropdowns
+   reset to their defaults after each submission; "balls tested" stays put
+   for the next player.
 
 Behind the scenes this still writes one `Log` row per ball (a made row per
-hit, a missed row per miss), exactly like every other skill — only the
-frontend batches them into a single submission and a single **UNDO**, so
-`Summary Sheet`, coach tabs, and `Setting Rankings` all keep working
-unchanged. **UNDO** removes an entire batch (one whole Front or Back
-submission) at once, not one ball at a time.
+hit, a missed row per miss, every row in the batch carrying the same Quality
+rating), exactly like every other skill — only the frontend batches them into
+a single submission and a single **UNDO**, so `Summary Sheet`, coach tabs,
+and `Setting Rankings`' hit-rate columns all keep working unchanged. **UNDO**
+removes an entire batch (one whole Front or Back submission) at once, not one
+ball at a time.
 
 A player's Setting score is their overall hit rate (hits ÷ attempts, combining
 front and back). `Setting Rankings` additionally breaks it out into **Front
 %** and **Back %** so you can see whether a player struggles with one type of
-set specifically, even though ranking itself uses the combined rate.
+set specifically, even though ranking itself uses the combined rate. It also
+adds, per side: **Made** (a running total of every ball that's ever hit the
+target on that side — grows as more batches are logged, never resets),
+**Avg Quality** (every Quality rating ever given for that side, averaged —
+same supplementary role as Blocking's Avg Quality, not part of the ranking
+sort), and **Set Score** (Made + Avg Quality combined into one number,
+purely informational).
 
 ## How the Game Play page works
 
