@@ -441,6 +441,16 @@ rankings tab's filter dropdown and Position Rankings' columns together.
 
 ## Troubleshooting
 
+### Some `Log` rows show only a date, others show date and time
+Every attempt is logged with a real timestamp (date **and** time) — this is
+purely a display setting, not missing data. The `Timestamp` column never had
+an explicit number format, so Sheets was guessing a per-cell display format
+on its own, inconsistently. `setupLogSheet()` now sets one consistent
+date+time format for the whole column; paste in the updated `Code.gs` and
+re-run `setupSheet()` (safe to re-run any time) to apply it — this fixes the
+display for every existing row immediately, not just new ones, since it's
+only changing how the already-correct values are shown.
+
 ### Attacking's or Digging's "+" or "-" throws a parse error in the `Log` tab
 `Log`'s Result column stores these skills' raw symbols (`+`/`.`/`-` —
 `PLUS_MINUS_SKILLS` in `Code.gs` lists which skills use this convention).

@@ -9,7 +9,7 @@
 // (Deploy > Manage deployments > Edit > New version > Deploy), open the Web
 // app URL directly in a browser with no query string — the JSON response's
 // "version" field should match this, confirming the redeploy actually took.
-const CODE_VERSION = "2026-08-10-live-skill-status";
+const CODE_VERSION = "2026-08-10-log-timestamp-format";
 
 const SHEETS = {
   ROSTER: "Roster",
@@ -149,6 +149,14 @@ function setupLogSheet(ss) {
   ];
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setWrap(true).setHorizontalAlignment("center");
   sheet.setFrozenRows(1);
+
+  // Every attempt is appended with a real JS Date() (date AND time), but
+  // this column was never given an explicit format — left on "Automatic",
+  // Sheets infers a display format per cell, which is how some rows ended
+  // up showing only the date. Forcing one consistent format fixes existing
+  // rows immediately (this only changes display, not the underlying value)
+  // and keeps future appends consistent too.
+  sheet.getRange("A2:A").setNumberFormat("M/d/yyyy h:mm:ss AM/PM");
 
   // Attacking's Result values ("+"/"-"/".") get appended as plain strings,
   // but Sheets' normal value inference treats a leading "+" or "-" as the
