@@ -313,7 +313,15 @@ dropdown.
    Rankings`, `Game Play Rankings`, `Digging Rankings`), `Position Rankings`,
    and hidden helper tabs (`Passing Data`, `Blocking Data`) used internally
    for tie-break/stat sorting — no need to open them.
-3. **If you already have a tab with columns like `Player #, Name, Positions,
+3. **Column widths**: every rebuild resets each tab's columns back to
+   default width, since `setupSheet` rebuilds each tab's content and
+   formatting from scratch. To make your own widths stick across reruns,
+   resize the columns the way you want them, then run `captureColumnWidths`
+   the same way (function dropdown → Run) — it snapshots every managed
+   tab's current widths, and every `setupSheet` run after that restores
+   them automatically at the end. Re-run `captureColumnWidths` any time you
+   adjust widths again to update what gets restored.
+4. **If you already have a tab with columns like `Player #, Name, Positions,
    Grade, Serving, Passing, Attacking, Blocking, Setting, Game Play, Digging`** —
    rename that tab to exactly `Summary Sheet` before running `setupSheet`. The
    script will overwrite its Player #/Name/Positions/Grade/skill columns with
@@ -322,7 +330,7 @@ dropdown.
    Same goes for any coach tabs you already created by hand — as long as
    they're named to exactly match an entry in `COACHES`, `setupSheet` rebuilds
    them in place with live formulas.
-4. `setupSheet` is safe to re-run any time — it rebuilds `Summary Sheet`,
+5. `setupSheet` is safe to re-run any time — it rebuilds `Summary Sheet`,
    every coach tab, and every rankings tab from scratch. It never touches
    `Roster` or `Log`, so re-running won't lose data.
 

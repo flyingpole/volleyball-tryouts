@@ -9,7 +9,7 @@
 // (Deploy > Manage deployments > Edit > New version > Deploy), open the Web
 // app URL directly in a browser with no query string — the JSON response's
 // "version" field should match this, confirming the redeploy actually took.
-const CODE_VERSION = "2026-08-10-fix-timestamp-format-row-bound";
+const CODE_VERSION = "2026-08-10-persist-column-widths";
 
 const SHEETS = {
   ROSTER: "Roster",
@@ -122,6 +122,54 @@ function setupSheet() {
   buildGamePlayRankingsSheet(getOrCreateSheet(ss, SHEETS.GAME_PLAY_RANKINGS), "J");
 
   buildPositionRankingsSheet(getOrCreateSheet(ss, SHEETS.POSITION_RANKINGS));
+
+  restoreColumnWidths(ss);
+}
+
+// How many columns (from A) to capture/restore widths for on every sheet —
+// generous enough to cover a manually-widened trailing column even past
+// where content ends (Position Rankings alone uses up to 20).
+const COLUMN_WIDTH_CAPTURE_COLS = 25;
+
+// Every builder function above rebuilds its sheet's content and formatting
+// from scratch on each setupSheet() run, which is also what was quietly
+// resetting any column width you'd manually adjusted — this runs last and
+// puts your widths back afterward, for every sheet setupSheet() manages
+// (see captureColumnWidths() below). Does nothing until you've captured at
+// least once.
+function restoreColumnWidths(ss) {
+  const saved = PropertiesService.getScriptProperties().getProperty("COLUMN_WIDTHS");
+  if (!saved) return;
+  const widthsBySheet = JSON.parse(saved);
+  Object.keys(widthsBySheet).forEach((sheetName) => {
+    const sheet = ss.getSheetByName(sheetName);
+    if (!sheet) return;
+    widthsBySheet[sheetName].forEach((width, idx) => {
+      if (width) sheet.setColumnWidth(idx + 1, width);
+    });
+  });
+}
+
+// Run this manually from the Apps Script editor's function dropdown any
+// time after you've resized columns to your liking — it snapshots every
+// managed sheet's current column widths so setupSheet() can restore them
+// on every future rebuild instead of resetting to default. Re-run it
+// whenever you adjust widths again to update what gets restored.
+function captureColumnWidths() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheetNames = RESERVED_SHEETS.concat(COACHES);
+  const widthsBySheet = {};
+  sheetNames.forEach((name) => {
+    const sheet = ss.getSheetByName(name);
+    if (!sheet) return;
+    const widths = [];
+    for (let col = 1; col <= COLUMN_WIDTH_CAPTURE_COLS; col++) {
+      widths.push(sheet.getColumnWidth(col));
+    }
+    widthsBySheet[name] = widths;
+  });
+  PropertiesService.getScriptProperties().setProperty("COLUMN_WIDTHS", JSON.stringify(widthsBySheet));
+  Logger.log(`Captured column widths for ${Object.keys(widthsBySheet).length} sheet(s). Re-run setupSheet() any time — your widths will now be restored automatically.`);
 }
 
 function getOrCreateSheet(ss, name) {
