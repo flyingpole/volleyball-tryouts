@@ -14,6 +14,8 @@ let sessionTallies = {}; // playerNumber -> { attempts, points }
 let undoStack = []; // most-recent-first, confirmed (server-acknowledged) attempts only, capped at MAX_UNDO
 let jogSettleTimer = null;
 let suppressJogSettle = false; // true while we're programmatically scrolling the jog wheel, so that scroll doesn't get misread as the user hunting for a player
+const SKILL_STATUS_POLL_MS = 45000;
+let skillStatus = {}; // playerNumber -> { attempts } — live, all-coaches count from the server (see fetchSkillStatus in app.js), so a different coach's already-logged attempts show up here too
 
 function computeScore(result, hitTarget) {
   if (result === "Missed") return 0;
@@ -53,6 +55,17 @@ function activePlayer() {
   return activeIndex === null ? null : visiblePlayers[activeIndex];
 }
 
+// Prefers the live, all-coaches count (skillStatus) over this device's own
+// local tally — the local one only exists to show an instant number right
+// after this device's own tap, before the next server poll/refresh
+// reconciles it (see submitAttempt/performUndo).
+function liveAttempts(playerNumber) {
+  const live = skillStatus[playerNumber];
+  if (live) return live.attempts;
+  const local = sessionTallies[playerNumber];
+  return local ? local.attempts : null;
+}
+
 function renderRows() {
   els.playerRows.innerHTML = "";
   visiblePlayers.forEach((p, idx) => {
@@ -64,15 +77,28 @@ function renderRows() {
     label.textContent = `#${p.playerNumber} — ${p.playerName || "(unnamed)"}`;
     btn.appendChild(label);
 
-    const tally = sessionTallies[p.playerNumber];
+    const attempts = liveAttempts(p.playerNumber);
     const tallySpan = document.createElement("span");
     tallySpan.className = "tally";
-    tallySpan.textContent = tally ? `${tally.attempts} att` : "";
+    tallySpan.textContent = attempts ? `${attempts} att` : "";
     btn.appendChild(tallySpan);
 
     btn.addEventListener("click", () => selectPlayer(idx));
     els.playerRows.appendChild(btn);
   });
+}
+
+// Polls the server for a live, all-coaches attempt count per player, so a
+// different coach's submission (from a different device) shows up here
+// without a manual reload.
+async function refreshSkillStatus() {
+  try {
+    skillStatus = await fetchSkillStatus(SKILL);
+  } catch (err) {
+    return; // transient failure — keep showing whatever we last had
+  }
+  renderRows();
+  refreshUI();
 }
 
 function selectPlayer(idx) {
@@ -86,9 +112,9 @@ function selectPlayer(idx) {
 
 function refreshUI() {
   const p = activePlayer();
-  const tally = p ? sessionTallies[p.playerNumber] : null;
+  const attempts = p ? liveAttempts(p.playerNumber) : null;
   els.activePlayerLabel.textContent = p
-    ? `#${p.playerNumber} ${p.playerName || "(unnamed)"}${tally ? ` — ${tally.attempts} att` : ""}`
+    ? `#${p.playerNumber} ${p.playerName || "(unnamed)"}${attempts ? ` — ${attempts} att` : ""}`
     : (visiblePlayers.length ? "Tap a player" : "Load a group");
 
   velocityButtons.forEach((btn) => {
@@ -228,7 +254,9 @@ async function init() {
   }
 
   try {
-    const [coaches, players] = await Promise.all([fetchCoaches(), fetchRoster()]);
+    const [coaches, players, status] = await Promise.all([
+      fetchCoaches(), fetchRoster(), fetchSkillStatus(SKILL).catch(() => ({})),
+    ]);
     coaches.forEach((name) => {
       const opt = document.createElement("option");
       opt.value = name;
@@ -238,6 +266,9 @@ async function init() {
     const savedCoach = getSavedCoach();
     if (savedCoach && coaches.includes(savedCoach)) els.coachSelect.value = savedCoach;
     updateHeaderCoach(els.coachSelect.value);
+
+    skillStatus = status;
+    setInterval(refreshSkillStatus, SKILL_STATUS_POLL_MS);
 
     roster = players;
     renderPlayerJog();
@@ -333,6 +364,14 @@ function pushUndoEntry(entry) {
   if (undoStack.length > MAX_UNDO) undoStack.length = MAX_UNDO;
 }
 
+// Optimistically adjusts the live (all-coaches) count so this device's own
+// tap/undo shows up instantly, ahead of the next refreshSkillStatus() call
+// reconciling it with the server's actual value.
+function bumpLiveAttempts(playerNumber, delta) {
+  const current = skillStatus[playerNumber] ? skillStatus[playerNumber].attempts : 0;
+  skillStatus[playerNumber] = { attempts: Math.max(0, current + delta) };
+}
+
 // Updates state and the screen immediately, then confirms with the server in
 // the background — Apps Script round-trips can take a couple of seconds, and
 // waiting on that made rapid-fire scoring feel sluggish. Rolls back if the
@@ -351,6 +390,7 @@ function submitAttempt(result, hitTarget) {
   const pts = computeScore(result, hitTarget);
 
   adjustTally(p.playerNumber, 1, pts);
+  bumpLiveAttempts(p.playerNumber, 1);
   pendingResult = null;
   renderRows();
   refreshUI();
@@ -369,11 +409,13 @@ function submitAttempt(result, hitTarget) {
       setToast(`✓ #${p.playerNumber} ${p.playerName} — ${response.points ?? pts} pts`, false);
       refreshUI();
       persistState();
+      refreshSkillStatus(); // reconcile with the server's actual count — another coach may have logged this same player concurrently
     })
     .catch((err) => {
       if (err.confirmed) {
         // The server explicitly rejected it — nothing was written, safe to roll back.
         adjustTally(p.playerNumber, -1, -pts);
+        bumpLiveAttempts(p.playerNumber, -1);
         renderRows();
         setToast(`⚠ #${p.playerNumber} ${p.playerName} failed to save: ${err.message}`, true);
       } else {
@@ -392,6 +434,7 @@ function performUndo() {
   const undone = undoStack.shift();
 
   adjustTally(undone.playerNumber, -1, -undone.points);
+  bumpLiveAttempts(undone.playerNumber, -1);
   const idx = visiblePlayers.findIndex((p) => String(p.playerNumber) === String(undone.playerNumber));
   if (idx !== -1) activeIndex = idx;
   pendingResult = null;
@@ -403,6 +446,7 @@ function performUndo() {
   postUndo({ coach: undone.coach, rowNumber: undone.rowNumber })
     .then(() => {
       setToast(`↩ Undid #${undone.playerNumber} ${undone.playerName} — ${undone.points} pts`, false);
+      refreshSkillStatus();
     })
     .catch((err) => {
       if (err.confirmed) {
@@ -410,6 +454,7 @@ function performUndo() {
         // safe to put the entry back and restore the tally.
         undoStack.unshift(undone);
         adjustTally(undone.playerNumber, 1, undone.points);
+        bumpLiveAttempts(undone.playerNumber, 1);
         renderRows();
         refreshUI();
         setToast(`Couldn't undo: ${err.message}`, true);

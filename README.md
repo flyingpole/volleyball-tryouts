@@ -65,28 +65,35 @@ you open one of these pages (no saved state on that device yet), it loads
 starting from the lowest player number on the roster, so there's nothing to
 set up before scoring the first player.
 
-## "Already logged" (Blocking and Setting only)
+## "Already logged" (every skill except Game Play)
 
-These two skills have a persistent input field worth pre-filling (a
-time+quality reading, or a balls/made/quality batch) — Serving, Passing,
-Attacking, and Digging are simple tap-and-log buttons with nothing to
-pre-fill, so they don't have this; their player rows just show this
-device's local attempt counts, same as always. Game Play is excluded too,
-since multiple coaches are meant to add running +/- log entries for the
-same on-court player, not evaluate them once.
+Every skill page polls the Web App every 45 seconds for a live, all-coaches
+view of who's already been evaluated on that skill —
+`?action=skillStatus&skill=<Skill>` reads `Log` fresh on every request and
+returns each player's aggregated result (see `computeSkillStatus()` in
+`Code.gs`). This is why a coach on one phone can see that a *different*
+coach, on a *different* device, already logged attempts for a player — it's
+not limited to what this device itself has seen. Without this, two coaches
+working the same skill independently could each run a player through a full
+set of reps, doubling up when one pass was enough.
 
-On Blocking and Setting, the app polls the Web App every 45 seconds for a
-live, all-coaches view of who's already been evaluated on that skill —
-`?action=skillStatus&skill=Blocking` or `...=Setting` reads `Log` fresh on
-every request and returns each player's aggregated result (see
-`computeSkillStatus()` in `Code.gs`). This is why a coach on one phone can
-see that a *different* coach, on a *different* device, already ran a player
-through blocking or setting — it's not limited to what this device itself
-has logged. A poll never overwrites a field you're actively editing (typing
-in Blocking's time field, or with focus in one of Setting's dropdowns) —
-it'll pick up on the next poll once you're done. Logging or undoing your own
-attempt also triggers an immediate refresh, rather than waiting for the next
-scheduled poll.
+Blocking and Setting have a persistent input field worth pre-filling (a
+time+quality reading, or a balls/made/quality batch) — a poll pre-fills that
+field and highlights it green. A poll never overwrites a field you're
+actively editing (typing in Blocking's time field, or with focus in one of
+Setting's dropdowns); it picks up the change on the next poll once you're
+done. Serving, Passing, Attacking, and Digging are simple tap-and-log
+buttons with nothing to pre-fill — instead, the live count just replaces
+the attempt number shown on each player's row (and, for Attacking, the
+active-player label too), so "5 att" always reflects everyone who's logged
+that player, not just this device.
+
+Game Play is excluded from all of this: multiple coaches are meant to add
+running +/- log entries for the same on-court player there, not evaluate
+them once, so there's no "already logged" question to answer.
+
+Every page also triggers an immediate refresh right after logging or
+undoing your own attempt, rather than waiting for the next scheduled poll.
 
 ## How the Serving page works
 

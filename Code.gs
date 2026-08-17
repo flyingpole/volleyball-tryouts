@@ -9,7 +9,7 @@
 // (Deploy > Manage deployments > Edit > New version > Deploy), open the Web
 // app URL directly in a browser with no query string — the JSON response's
 // "version" field should match this, confirming the redeploy actually took.
-const CODE_VERSION = "2026-08-10-persist-column-widths";
+const CODE_VERSION = "2026-08-10-live-attempts-all-skills";
 
 const SHEETS = {
   ROSTER: "Roster",
@@ -803,15 +803,19 @@ function doGet(e) {
   return jsonResponse({ status: "ok", version: CODE_VERSION });
 }
 
+// Skills whose page is simple tap-and-log buttons with no persistent field
+// worth pre-filling — they still need a live, all-coaches attempt count
+// (see SIMPLE_ATTEMPT_SKILLS branch below), just not the fuller
+// pre-fill/highlight Blocking and Setting get. Game Play is deliberately
+// excluded from all of this: multiple coaches are meant to add running +/-
+// log entries for the same on-court player there, not evaluate them once.
+const SIMPLE_ATTEMPT_SKILLS = ["Serving", "Passing", "Attacking", "Digging"];
+
 // Live, all-coaches "has this player already been evaluated on this skill"
 // status, read fresh from Log on every request (not cached) so one coach's
 // just-submitted attempt shows up for another coach's device on their next
-// poll. Blocking and Setting pages poll this and pre-fill/highlight their
-// input fields from it — see README's "already logged" sections. Only these
-// two skills have a persistent input field worth pre-filling (a time+quality
-// reading, or a balls/made/quality batch); Serving/Passing/Attacking are
-// simple tap-and-log buttons with nothing to pre-fill, so they're not
-// covered here — their player rows already show local attempt counts.
+// poll. Every skill page except Game Play polls this — see README's
+// "Already logged" section.
 function computeSkillStatus(ss, skill) {
   const logSheet = ss.getSheetByName(SHEETS.LOG);
   const lastRow = logSheet.getLastRow();
@@ -875,6 +879,24 @@ function computeSkillStatus(ss, skill) {
       });
       result[key] = sides;
     });
+    return result;
+  }
+
+  if (SIMPLE_ATTEMPT_SKILLS.indexOf(skill) !== -1) {
+    // No averaged value worth pre-filling (these are all one-tap buttons,
+    // not a persistent field), but a coach on one device still needs to
+    // know how many attempts ANY coach has already logged for a player —
+    // otherwise two coaches can each independently run a player through a
+    // full set of reps, doubling up when one pass was enough.
+    const byPlayer = {};
+    rows.forEach((row) => {
+      const [, , playerNumber, , rowSkill, , , , , deleted] = row;
+      if (rowSkill !== skill || deleted === true) return;
+      const key = String(playerNumber);
+      byPlayer[key] = (byPlayer[key] || 0) + 1;
+    });
+    const result = {};
+    Object.keys(byPlayer).forEach((key) => { result[key] = { attempts: byPlayer[key] }; });
     return result;
   }
 
