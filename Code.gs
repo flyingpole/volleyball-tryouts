@@ -9,7 +9,7 @@
 // (Deploy > Manage deployments > Edit > New version > Deploy), open the Web
 // app URL directly in a browser with no query string — the JSON response's
 // "version" field should match this, confirming the redeploy actually took.
-const CODE_VERSION = "2026-08-10-log-timestamp-format";
+const CODE_VERSION = "2026-08-10-fix-timestamp-format-row-bound";
 
 const SHEETS = {
   ROSTER: "Roster",
@@ -156,7 +156,15 @@ function setupLogSheet(ss) {
   // up showing only the date. Forcing one consistent format fixes existing
   // rows immediately (this only changes display, not the underlying value)
   // and keeps future appends consistent too.
-  sheet.getRange("A2:A").setNumberFormat("M/d/yyyy h:mm:ss AM/PM");
+  //
+  // Bounded to LOG_MAX_ROWS explicitly (not the open-ended "A2:A" notation)
+  // — that shorthand only formats up to the sheet's row count AT THE MOMENT
+  // this runs, so anything Sheets later auto-grows past that (new rows
+  // appended beyond the current bottom) silently comes out unformatted
+  // again. Setting writes 5-25 rows per single batch submission, so it hit
+  // this far sooner than every other skill's one-row-at-a-time appends —
+  // that's why Setting rows specifically kept showing date-only.
+  sheet.getRange(2, 1, LOG_MAX_ROWS, 1).setNumberFormat("M/d/yyyy h:mm:ss AM/PM");
 
   // Attacking's Result values ("+"/"-"/".") get appended as plain strings,
   // but Sheets' normal value inference treats a leading "+" or "-" as the
@@ -164,7 +172,8 @@ function setupLogSheet(ss) {
   // it, so it throws a parse error instead of just storing the symbol.
   // Forcing this column to Plain Text turns that inference off, so appended
   // values are always stored literally regardless of what they start with.
-  sheet.getRange("F2:F").setNumberFormat("@");
+  // Same LOG_MAX_ROWS bound as above, for the same reason.
+  sheet.getRange(2, 6, LOG_MAX_ROWS, 1).setNumberFormat("@");
 }
 
 // Skills whose Result is the raw "+"/"."/"-" symbol (rather than a word like

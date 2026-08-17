@@ -451,6 +451,17 @@ re-run `setupSheet()` (safe to re-run any time) to apply it — this fixes the
 display for every existing row immediately, not just new ones, since it's
 only changing how the already-correct values are shown.
 
+The first attempt at this fix used Apps Script's open-ended `"A2:A"` column
+notation, which only formats rows up to the sheet's row count *at the moment
+`setupSheet()` runs* — anything Sheets later auto-grows past that (new rows
+appended beyond the current bottom) comes out unformatted again. Setting
+writes 5-25 rows per single batch submission, so it hit that ceiling far
+sooner than every other skill's one-row-at-a-time appends, which is why
+Setting rows specifically kept showing date-only even after the first fix.
+Now bounded explicitly to `LOG_MAX_ROWS` (10,000) instead, with plenty of
+headroom for a full season. If you applied the first version of this fix,
+re-paste `Code.gs` and re-run `setupSheet()` once more.
+
 ### Attacking's or Digging's "+" or "-" throws a parse error in the `Log` tab
 `Log`'s Result column stores these skills' raw symbols (`+`/`.`/`-` —
 `PLUS_MINUS_SKILLS` in `Code.gs` lists which skills use this convention).
