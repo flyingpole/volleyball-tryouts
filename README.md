@@ -483,12 +483,17 @@ re-paste `Code.gs` and re-run `setupSheet()` once more.
 Sheets normally treats a cell starting with `+` or `-` as the start of a
 number/formula — with nothing after it to complete that, a lone `+` or `-`
 throws a parse error instead of just storing the symbol. `setupLogSheet()`
-formats that column as Plain Text so this can't happen going forward, but
-the fix only takes effect once you paste in the updated `Code.gs`, save, and
-re-run `setupSheet()` (safe to re-run any time — see step 3 above). **If
-you're still seeing this on an attempt you just logged (not an old one)**,
-that's the sign this step hasn't actually been done yet — re-run
-`setupSheet()`, then try logging that attempt again.
+formats that column as Plain Text to prevent this, but the fix only takes
+effect once you've pasted in the updated `Code.gs`, saved, and re-run
+`setupSheet()` (safe to re-run any time — see step 3 above).
+
+If you've done that and it's *still* happening on attempts you just logged:
+`appendRow()`'s bulk array write doesn't reliably respect a column's Plain
+Text format for a leading `+`/`-` the way writing directly to that one cell
+does — `handleLogAttempt()` now re-writes the Result cell individually
+right after the append, forcing it to stick. Make sure you're on this
+version or later (check the deployed Web App URL's `"version"` field
+against `CODE_VERSION` in `Code.gs`).
 
 Any cells that broke before the fix need a separate repair, since the
 parse error already destroyed what was typed there. Run

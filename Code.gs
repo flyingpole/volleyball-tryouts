@@ -9,7 +9,7 @@
 // (Deploy > Manage deployments > Edit > New version > Deploy), open the Web
 // app URL directly in a browser with no query string — the JSON response's
 // "version" field should match this, confirming the redeploy actually took.
-const CODE_VERSION = "2026-08-10-live-attempts-all-skills";
+const CODE_VERSION = "2026-08-10-fix-append-row-plusminus";
 
 const SHEETS = {
   ROSTER: "Roster",
@@ -944,6 +944,14 @@ function handleLogAttempt(ss, body) {
       result, hitTarget, points, value2, false,
     ]);
     rowNumber = logSheet.getLastRow();
+    // appendRow's bulk array write doesn't reliably respect the Result
+    // column's Plain Text format for a leading "+"/"-" the way a direct
+    // setValue() on that one cell does — confirmed by
+    // repairPlusMinusResultCells()'s per-cell setValue() calls always
+    // working where a fresh appendRow() could still produce a parse error.
+    // Re-set just that cell immediately to force the literal string to
+    // stick, cheap insurance regardless of which skill this is.
+    logSheet.getRange(rowNumber, 6).setNumberFormat("@").setValue(result);
   } finally {
     lock.releaseLock();
   }
