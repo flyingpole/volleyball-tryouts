@@ -50,26 +50,42 @@ What you'll see:
   doesn't change what a single tap looks like, only what happens to it while
   it's in flight.
 
+### Undoing a tap before it even sends
+
+UNDO works even on a tap that hasn't reached the Sheet yet, not just
+already-confirmed ones. Every tap gets a brief (~1.2 second) pause before the
+queue actually sends it — just long enough that hitting UNDO right after a
+mis-tap cancels it locally and nothing is ever sent for it at all, instead of
+UNDO only being able to target whatever was already confirmed (which, when
+the queue was backed up, could silently undo an older, unrelated attempt
+instead of the one you just meant to fix).
+
 Two outcomes once a queued item is actually sent:
 
-- **Confirmed** — the server accepted it. The undo entry is added (so UNDO
-  only ever targets attempts the Sheet actually has) and the on-screen tally
-  updates from the server's numbers.
+- **Confirmed** — the server accepted it. From this point UNDO does a real
+  server-side undo (so it only ever targets attempts the Sheet actually has)
+  and the on-screen tally updates from the server's numbers.
 - **Rejected** — the server explicitly said no (a real validation failure,
   not a network hiccup). The optimistic tally is rolled back and an error
   toast explains why. This is rare and different from a network failure,
   which the queue retries automatically instead of surfacing to you.
 
+If you hit UNDO in the narrow window where a tap has already started
+sending but hasn't been confirmed yet, you'll see **"Still sending — try
+Undo again in a moment"** — it'll resolve within a second or two either way
+(confirmed or rejected), after which UNDO works normally on it.
+
 Retries are safe to repeat: each queued item carries a unique client-
 generated ID, and the backend recognizes a retried ID and returns the
 original result instead of logging (or undoing) it a second time — see
-"Idempotent retries" under Troubleshooting below. Undoing a tap that's still
-sitting in the queue (not yet confirmed) isn't supported yet — UNDO only
-works on attempts the Sheet has already confirmed.
+"Idempotent retries" under Troubleshooting below.
 
 Reloading or closing the page doesn't lose anything queued — the queue lives
 in `localStorage`, and reopening the page resumes draining wherever it left
-off.
+off. The one exception is a tap that was still pending (not yet confirmed)
+at the moment of reload: it still gets sent in the background like normal,
+but that specific tap can no longer be cancelled or undone from the UI after
+the reload, since the page lost track of which tap it was.
 
 ## The header menu (every page)
 

@@ -283,7 +283,15 @@ async function init() {
 
     const savedState = loadJSON(STATE_KEY, null);
     if (savedState && savedState.tallies) sessionTallies = savedState.tallies;
-    if (savedState && Array.isArray(savedState.undoStack)) undoStack = savedState.undoStack;
+    if (savedState && Array.isArray(savedState.undoStack)) {
+      // Drop any still-pending entry from a previous page load — its
+      // onConfirmed/onRejected callbacks were only ever registered in that
+      // session's memory (see queueCallbacks in app.js) and don't survive a
+      // reload, so it can never resolve into a real undo target again. The
+      // underlying queued item itself isn't lost — resumeQueue() below still
+      // sends it — it just can no longer be cancelled or undone from the UI.
+      undoStack = savedState.undoStack.filter((e) => !e.__pending);
+    }
 
     if (roster.length) {
       const lowest = Math.min(...roster.map((p) => Number(p.playerNumber)));
@@ -359,6 +367,25 @@ function pushUndoEntry(entry) {
   if (undoStack.length > MAX_UNDO) undoStack.length = MAX_UNDO;
 }
 
+// Finds the pending placeholder pushed at enqueue time (see submitAttempt)
+// and fills in the server-confirmed fields, clearing its pending flag — this
+// is what lets UNDO switch it from "cancel before it sends" to a real
+// server-side undo. No-ops if it already fell off the MAX_UNDO-capped stack.
+function resolvePendingUndo(clientId, serverFields) {
+  const entry = undoStack.find((e) => e.__pending && e.__clientId === clientId);
+  if (!entry) return;
+  delete entry.__pending;
+  delete entry.__clientId;
+  Object.assign(entry, serverFields);
+}
+
+// Removes the pending placeholder for a tap that was rejected outright — it
+// never counted, so there's nothing left for UNDO to reference.
+function removePendingUndo(clientId) {
+  const idx = undoStack.findIndex((e) => e.__pending && e.__clientId === clientId);
+  if (idx !== -1) undoStack.splice(idx, 1);
+}
+
 // Optimistically adjusts the live (all-coaches) count so this device's own
 // tap/undo shows up instantly, ahead of the next refreshSkillStatus() call
 // reconciling it with the server's actual value.
@@ -388,19 +415,11 @@ function submitAttempt(result) {
   advanceAfterScore();
   if (activePlayer()) scrollJogToPlayer(activePlayer().playerNumber);
   renderRows();
-  refreshUI();
   setToast(`✓ #${p.playerNumber} ${p.playerName} — "${result}" (saving…)`, false);
-  persistState();
 
-  enqueueAttempt({ coach, playerNumber: p.playerNumber, playerName: p.playerName, skill: SKILL, result }, {
+  const clientId = enqueueAttempt({ coach, playerNumber: p.playerNumber, playerName: p.playerName, skill: SKILL, result }, {
     onConfirmed: (response) => {
-      pushUndoEntry({
-        rowNumber: response.rowNumber,
-        coach,
-        playerNumber: p.playerNumber,
-        playerName: p.playerName,
-        points: response.points ?? pts,
-      });
+      resolvePendingUndo(clientId, { rowNumber: response.rowNumber, points: response.points ?? pts });
       setToast(`✓ #${p.playerNumber} ${p.playerName} — "${result}"`, false);
       refreshUI();
       persistState();
@@ -410,17 +429,46 @@ function submitAttempt(result) {
       // The server explicitly rejected it (a transient network/timeout
       // failure would have been retried automatically instead of reaching
       // here — see enqueue()/drainQueue() in app.js).
+      removePendingUndo(clientId);
       adjustTally(p.playerNumber, -1, -pts);
       bumpLiveAttempts(p.playerNumber, -1);
       renderRows();
+      refreshUI();
       setToast(`⚠ #${p.playerNumber} ${p.playerName} failed to save: ${err.message}`, true);
       persistState();
     },
   });
+
+  // Pending until confirmed — this is what lets UNDO cancel it outright
+  // (nothing sent yet) instead of only being able to undo already-confirmed
+  // attempts, which used to mean UNDO right after a mis-tap could silently
+  // target an older, unrelated attempt while this one was still in flight.
+  pushUndoEntry({ __pending: true, __clientId: clientId, coach, playerNumber: p.playerNumber, playerName: p.playerName, points: pts, result });
+  refreshUI();
+  persistState();
 }
 
 function performUndo() {
   if (!undoStack.length) return;
+  const top = undoStack[0];
+
+  if (top.__pending) {
+    if (!cancelQueued(top.__clientId)) {
+      setToast("Still sending — try Undo again in a moment.", true);
+      return;
+    }
+    undoStack.shift();
+    adjustTally(top.playerNumber, -1, -top.points);
+    bumpLiveAttempts(top.playerNumber, -1);
+    const idx = visiblePlayers.findIndex((p) => String(p.playerNumber) === String(top.playerNumber));
+    if (idx !== -1) activeIndex = idx;
+    renderRows();
+    refreshUI();
+    setToast(`↩ Cancelled #${top.playerNumber} ${top.playerName} — "${top.result}" before it sent`, false);
+    persistState();
+    return;
+  }
+
   const undone = undoStack.shift();
 
   adjustTally(undone.playerNumber, -1, -undone.points);

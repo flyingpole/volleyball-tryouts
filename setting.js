@@ -337,7 +337,15 @@ async function init() {
 
     const savedState = loadJSON(STATE_KEY, null);
     if (savedState && savedState.tallies) sessionTallies = savedState.tallies;
-    if (savedState && Array.isArray(savedState.undoStack)) undoStack = savedState.undoStack;
+    if (savedState && Array.isArray(savedState.undoStack)) {
+      // Drop any still-pending entry from a previous page load — its
+      // onConfirmed/onRejected callbacks were only ever registered in that
+      // session's memory (see queueCallbacks in app.js) and don't survive a
+      // reload, so it can never resolve into a real undo target again. The
+      // underlying queued item itself isn't lost — resumeQueue() below still
+      // sends it — it just can no longer be cancelled or undone from the UI.
+      undoStack = savedState.undoStack.filter((e) => !e.__pending);
+    }
     if (savedState && savedState.frontBalls) els.frontBallsSelect.value = savedState.frontBalls;
     if (savedState && savedState.backBalls) els.backBallsSelect.value = savedState.backBalls;
     populateMadeOptions(els.frontBallsSelect, els.frontMadeSelect);
@@ -419,6 +427,25 @@ function pushUndoEntry(entry) {
   if (undoStack.length > MAX_UNDO) undoStack.length = MAX_UNDO;
 }
 
+// Finds the pending placeholder pushed at enqueue time (see submitBatch) and
+// fills in the server-confirmed fields, clearing its pending flag — this is
+// what lets UNDO switch it from "cancel before it sends" to a real
+// server-side undo. No-ops if it already fell off the MAX_UNDO-capped stack.
+function resolvePendingUndo(clientId, serverFields) {
+  const entry = undoStack.find((e) => e.__pending && e.__clientId === clientId);
+  if (!entry) return;
+  delete entry.__pending;
+  delete entry.__clientId;
+  Object.assign(entry, serverFields);
+}
+
+// Removes the pending placeholder for a batch that was rejected outright —
+// it never counted, so there's nothing left for UNDO to reference.
+function removePendingUndo(clientId) {
+  const idx = undoStack.findIndex((e) => e.__pending && e.__clientId === clientId);
+  if (idx !== -1) undoStack.splice(idx, 1);
+}
+
 // Logs a whole drill set at once — the fixed ball count and how many hit the
 // target for one side — instead of tapping each rep. No pending selection
 // step; tapping "Log Front"/"Log Back" submits immediately using whatever
@@ -454,21 +481,14 @@ function submitBatch(side) {
   adjustTally(p.playerNumber, balls, made);
   renderRows();
   applyBatchFieldState(); // shows what was just submitted and marks this side "already logged"
-  refreshUI();
   setToast(`✓ #${p.playerNumber} ${p.playerName} — ${label} (saving…)`, false);
-  persistState();
 
-  enqueueSettingBatch({ coach, playerNumber: p.playerNumber, playerName: p.playerName, side, balls, made, quality }, {
+  const clientId = enqueueSettingBatch({ coach, playerNumber: p.playerNumber, playerName: p.playerName, side, balls, made, quality }, {
     onConfirmed: (response) => {
-      pushUndoEntry({
+      resolvePendingUndo(clientId, {
         startRow: response.startRow,
         rowCount: response.rowCount,
-        coach,
-        playerNumber: p.playerNumber,
-        playerName: p.playerName,
-        side,
         made: response.made,
-        quality,
       });
       setToast(`✓ #${p.playerNumber} ${p.playerName} — ${label}`, false);
       refreshUI();
@@ -476,17 +496,49 @@ function submitBatch(side) {
       refreshSkillStatus();
     },
     onRejected: (err) => {
+      removePendingUndo(clientId);
       adjustTally(p.playerNumber, -balls, -made);
       renderRows();
+      refreshUI();
       setToast(`⚠ #${p.playerNumber} ${p.playerName} failed to save: ${err.message}`, true);
       refreshSkillStatus(); // discard the optimistic guess above, resync with the server's actual state
       persistState();
     },
   });
+
+  // Pending until confirmed — this is what lets UNDO cancel it outright
+  // (nothing sent yet) instead of only being able to undo already-confirmed
+  // batches, which used to mean UNDO right after a mis-tap could silently
+  // target an older, unrelated batch while this one was still in flight.
+  // startRow/rowCount aren't known until the server confirms, so the pending
+  // rollback below uses balls (what was optimistically applied) instead of
+  // rowCount (the server-confirmed count a real undo reverses).
+  pushUndoEntry({ __pending: true, __clientId: clientId, coach, playerNumber: p.playerNumber, playerName: p.playerName, side, balls, made, quality });
+  refreshUI();
+  persistState();
 }
 
 function performUndo() {
   if (!undoStack.length) return;
+  const top = undoStack[0];
+
+  if (top.__pending) {
+    if (!cancelQueued(top.__clientId)) {
+      setToast("Still sending — try Undo again in a moment.", true);
+      return;
+    }
+    undoStack.shift();
+    adjustTally(top.playerNumber, -top.balls, -top.made);
+    const idx = visiblePlayers.findIndex((p) => String(p.playerNumber) === String(top.playerNumber));
+    if (idx !== -1) activeIndex = idx;
+    renderRows();
+    applyBatchFieldState();
+    refreshUI();
+    setToast(`↩ Cancelled #${top.playerNumber} ${top.playerName}'s ${top.side} batch before it sent`, false);
+    persistState();
+    return;
+  }
+
   const undone = undoStack.shift();
 
   adjustTally(undone.playerNumber, -undone.rowCount, -undone.made);

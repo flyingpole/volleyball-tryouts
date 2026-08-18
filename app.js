@@ -209,6 +209,7 @@ const QUEUE_KEY = "vbtryouts_send_queue";
 const QUEUE_BASE_DELAY_MS = 2000;
 const QUEUE_MAX_DELAY_MS = 30000;
 const QUEUE_STUCK_AFTER_ATTEMPTS = 8; // show a "not syncing" warning after this many consecutive failures on the item currently at the front
+const QUEUE_SEND_DELAY_MS = 1200; // brief pre-send grace period, see drainQueue
 
 let queueDraining = false;
 let queueConsecutiveFailures = 0;
@@ -265,29 +266,42 @@ function enqueue(payload, callbacks) {
   return clientId;
 }
 
-async function enqueueAttempt(payload, callbacks) {
+// Not async — enqueue() itself never awaits anything, so these stay
+// synchronous on purpose. Callers rely on getting the real clientId back
+// immediately (not a Promise) so they can record a pending undo-stack entry
+// in the same tick as the tap, before anything has been sent.
+function enqueueAttempt(payload, callbacks) {
   return enqueue(payload, callbacks);
 }
 
-async function enqueueUndo(payload, callbacks) {
+function enqueueUndo(payload, callbacks) {
   return enqueue({ ...payload, action: "undo" }, callbacks);
 }
 
-async function enqueueSettingBatch(payload, callbacks) {
+function enqueueSettingBatch(payload, callbacks) {
   return enqueue({ ...payload, action: "logSettingBatch" }, callbacks);
 }
 
-async function enqueueUndoBatch(payload, callbacks) {
+function enqueueUndoBatch(payload, callbacks) {
   return enqueue({ ...payload, action: "undoBatch" }, callbacks);
 }
+
+// Tracks whichever clientId is currently mid-flight (request sent, response
+// not back yet) so cancelQueued can refuse to touch it. Once a request is
+// actually in flight it may have already reached the server — removing it
+// from the local queue at that point wouldn't stop the write, it would just
+// desync the local queue from what the server has (see cancelQueued).
+let inFlightClientId = null;
 
 // Removes a not-yet-sent item from the queue — used when a coach undoes an
 // attempt before it's even reached the server (very likely exactly when the
 // queue is backed up, i.e. exactly when this matters most), so nothing
 // needs to be sent for it at all. Returns true if it was still queued and
-// got removed; false if it was already sent (or is fully mid-flight),
-// meaning the caller needs to fall back to a real undo request instead.
+// got removed; false if it's currently in flight or already gone (sent,
+// confirmed, or rejected), meaning the caller can't cancel it locally and
+// must wait for its onConfirmed/onRejected callback to settle first.
 function cancelQueued(clientId) {
+  if (clientId === inFlightClientId) return false;
   const queue = loadQueue();
   const idx = queue.findIndex((item) => item.clientId === clientId);
   if (idx === -1) return false;
@@ -308,27 +322,46 @@ function cancelQueued(clientId) {
 async function drainQueue() {
   if (queueDraining) return;
   queueDraining = true;
+  const graced = new Set(); // clientIds that already had their pre-send grace period this drain session — retries after a transient failure skip it (the backoff delay already gives cancelQueued a window)
   try {
     for (;;) {
       const queue = loadQueue();
       if (!queue.length) break;
       const item = queue[0];
+
+      if (!graced.has(item.clientId)) {
+        graced.add(item.clientId);
+        // A freshly-enqueued item would otherwise start sending
+        // synchronously as part of the very same call stack as enqueue()
+        // itself — before the tap's click handler even finishes running —
+        // leaving no real window for cancelQueued to ever succeed. This
+        // brief pause is what actually creates that window.
+        await new Promise((resolve) => setTimeout(resolve, QUEUE_SEND_DELAY_MS));
+        const stillQueued = loadQueue();
+        if (!stillQueued.some((q) => q.clientId === item.clientId)) continue; // cancelled during the grace period
+      }
+
+      inFlightClientId = item.clientId;
       try {
         const response = await postJSON(item.payload);
+        inFlightClientId = null;
         queueConsecutiveFailures = 0;
         const cb = queueCallbacks[item.clientId];
         delete queueCallbacks[item.clientId];
         const remaining = loadQueue();
-        remaining.shift();
+        const idx = remaining.findIndex((q) => q.clientId === item.clientId);
+        if (idx !== -1) remaining.splice(idx, 1);
         saveQueue(remaining);
         refreshQueueStatusUI();
         if (cb && cb.onConfirmed) cb.onConfirmed(response);
       } catch (err) {
+        inFlightClientId = null;
         if (err.confirmed) {
           const cb = queueCallbacks[item.clientId];
           delete queueCallbacks[item.clientId];
           const remaining = loadQueue();
-          remaining.shift();
+          const idx = remaining.findIndex((q) => q.clientId === item.clientId);
+          if (idx !== -1) remaining.splice(idx, 1);
           saveQueue(remaining);
           queueConsecutiveFailures = 0;
           refreshQueueStatusUI();
