@@ -9,7 +9,7 @@
 // (Deploy > Manage deployments > Edit > New version > Deploy), open the Web
 // app URL directly in a browser with no query string — the JSON response's
 // "version" field should match this, confirming the redeploy actually took.
-const CODE_VERSION = "2026-08-10-fix-append-row-plusminus";
+const CODE_VERSION = "2026-08-18-idempotent-send-queue";
 
 const SHEETS = {
   ROSTER: "Roster",
@@ -185,15 +185,19 @@ function setupRosterSheet(ss) {
 }
 
 // Log columns: Timestamp, Coach, Player #, Player Name, Skill, Result, Hit
-// Target, Points, Value 2, Deleted. "Points" is each skill's primary number
-// (serve/pass grade, attack +1/0/-1, block TIME in seconds, set 1/0, game
-// play +1/-1). "Value 2" is a secondary number only Blocking uses so far
-// (quality 1-3) — kept generic so a future skill can reuse it.
+// Target, Points, Value 2, Deleted, Client ID. "Points" is each skill's
+// primary number (serve/pass grade, attack +1/0/-1, block TIME in seconds,
+// set 1/0, game play +1/-1). "Value 2" is a secondary number only Blocking
+// uses so far (quality 1-3) — kept generic so a future skill can reuse it.
+// "Client ID" is the send queue's dedup key (see withIdempotency) — kept as
+// a permanent audit trail on the row itself, though the dedup check itself
+// reads from CacheService, not this column, so it stays fast regardless of
+// how large Log grows.
 function setupLogSheet(ss) {
   const sheet = getOrCreateSheet(ss, SHEETS.LOG);
   const headers = [
     "Timestamp", "Coach", "Player #", "Player Name", "Skill",
-    "Result", "Hit Target", "Points", "Value 2", "Deleted",
+    "Result", "Hit Target", "Points", "Value 2", "Deleted", "Client ID",
   ];
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setWrap(true).setHorizontalAlignment("center");
   sheet.setFrozenRows(1);
@@ -222,6 +226,11 @@ function setupLogSheet(ss) {
   // values are always stored literally regardless of what they start with.
   // Same LOG_MAX_ROWS bound as above, for the same reason.
   sheet.getRange(2, 6, LOG_MAX_ROWS, 1).setNumberFormat("@");
+
+  // Client IDs are UUID-shaped strings — never at risk of the leading-+/-
+  // parse issue above, but Plain Text is cheap insurance against any other
+  // auto-formatting surprise for a column that's purely an internal key.
+  sheet.getRange(2, 11, LOG_MAX_ROWS, 1).setNumberFormat("@");
 }
 
 // Skills whose Result is the raw "+"/"."/"-" symbol (rather than a word like
@@ -916,6 +925,27 @@ function doPost(e) {
   }
 }
 
+// Makes every mutating request safe to retry. The frontend's send queue
+// (see app.js) retries a request that failed ambiguously — the network
+// timed out, but Apps Script may have actually finished the write — and a
+// naive retry would double-log the attempt. Each queued request carries a
+// client-generated ID; the first time we see one, run fn() and cache its
+// result (CacheService, 6 hours — far longer than any realistic retry
+// window, since the queue would have long since given up or succeeded by
+// then). Any retry with that same ID returns the cached result instead of
+// running fn() again. Requests with no clientId (older cached frontend,
+// or none supplied) always run fresh, matching the pre-queue behavior.
+function withIdempotency(clientId, fn) {
+  const cache = CacheService.getScriptCache();
+  if (clientId) {
+    const cached = cache.get(clientId);
+    if (cached) return JSON.parse(cached);
+  }
+  const result = fn();
+  if (clientId) cache.put(clientId, JSON.stringify(result), 21600);
+  return result;
+}
+
 function handleLogAttempt(ss, body) {
   const coach = String(body.coach || "").trim();
   const skill = String(body.skill || "").trim();
@@ -931,41 +961,46 @@ function handleLogAttempt(ss, body) {
   const hitTarget = !!body.hitTarget;
   const { points, value2 } = computeScoreDetails(skill, result, hitTarget, body.time);
 
-  // Multiple coaches submit concurrently during tryouts, so the append +
-  // "which row did I just write" read has to be atomic across requests.
-  const lock = LockService.getScriptLock();
-  lock.waitLock(10000);
-  let playerName, rowNumber;
-  try {
-    playerName = ensureRosterRow(ss, playerNumber, body.playerName || "");
-    const logSheet = ss.getSheetByName(SHEETS.LOG);
-    logSheet.appendRow([
-      new Date(), coach, playerNumber, playerName, skill,
-      result, hitTarget, points, value2, false,
-    ]);
-    rowNumber = logSheet.getLastRow();
-    // appendRow's bulk array write doesn't reliably respect the Result
-    // column's Plain Text format for a leading "+"/"-" the way a direct
-    // setValue() on that one cell does — confirmed by
-    // repairPlusMinusResultCells()'s per-cell setValue() calls always
-    // working where a fresh appendRow() could still produce a parse error.
-    // Re-set just that cell immediately to force the literal string to
-    // stick, cheap insurance regardless of which skill this is.
-    logSheet.getRange(rowNumber, 6).setNumberFormat("@").setValue(result);
-  } finally {
-    lock.releaseLock();
-  }
+  const data = withIdempotency(body.clientId, () => {
+    // Multiple coaches submit concurrently during tryouts, so the append +
+    // "which row did I just write" read has to be atomic across requests.
+    const lock = LockService.getScriptLock();
+    lock.waitLock(10000);
+    let playerName, rowNumber;
+    try {
+      playerName = ensureRosterRow(ss, playerNumber, body.playerName || "");
+      const logSheet = ss.getSheetByName(SHEETS.LOG);
+      logSheet.appendRow([
+        new Date(), coach, playerNumber, playerName, skill,
+        result, hitTarget, points, value2, false, body.clientId || "",
+      ]);
+      rowNumber = logSheet.getLastRow();
+      // appendRow's bulk array write doesn't reliably respect the Result
+      // column's Plain Text format for a leading "+"/"-" the way a direct
+      // setValue() on that one cell does — confirmed by
+      // repairPlusMinusResultCells()'s per-cell setValue() calls always
+      // working where a fresh appendRow() could still produce a parse error.
+      // Re-set just that cell immediately to force the literal string to
+      // stick, cheap insurance regardless of which skill this is.
+      logSheet.getRange(rowNumber, 6).setNumberFormat("@").setValue(result);
+    } finally {
+      lock.releaseLock();
+    }
 
-  try {
-    // Coaches normally already have a tab from setupSheet(); this is just a
-    // safety net if a name outside the COACHES list ever posts an attempt.
-    ensureCoachSheet(ss, coach);
-  } catch (err) {
-    // Non-fatal — the attempt above is already safely logged. A concurrent
-    // request may have just created this same tab.
-  }
+    try {
+      // Coaches normally already have a tab from setupSheet(); this is just
+      // a safety net if a name outside the COACHES list ever posts an
+      // attempt.
+      ensureCoachSheet(ss, coach);
+    } catch (err) {
+      // Non-fatal — the attempt above is already safely logged. A
+      // concurrent request may have just created this same tab.
+    }
 
-  return jsonResponse({ success: true, points, rowNumber });
+    return { success: true, points, rowNumber };
+  });
+
+  return jsonResponse(data);
 }
 
 // Marks one Log row as Deleted by its exact row number, only if it still
@@ -982,26 +1017,30 @@ function handleUndo(ss, body) {
     throw new Error("Missing coach or rowNumber for undo");
   }
 
-  const lock = LockService.getScriptLock();
-  lock.waitLock(10000);
-  try {
-    const logSheet = ss.getSheetByName(SHEETS.LOG);
-    if (rowNumber > logSheet.getLastRow()) {
-      throw new Error("That attempt is no longer there to undo");
+  const data = withIdempotency(body.clientId, () => {
+    const lock = LockService.getScriptLock();
+    lock.waitLock(10000);
+    try {
+      const logSheet = ss.getSheetByName(SHEETS.LOG);
+      if (rowNumber > logSheet.getLastRow()) {
+        throw new Error("That attempt is no longer there to undo");
+      }
+      const row = logSheet.getRange(rowNumber, 1, 1, 10).getValues()[0];
+      const [, rowCoach, playerNumber, playerName, , , , points, , deleted] = row;
+      if (String(rowCoach) !== coach) {
+        throw new Error("That attempt no longer matches — can't undo");
+      }
+      if (deleted === true) {
+        throw new Error("That attempt was already undone");
+      }
+      logSheet.getRange(rowNumber, 10).setValue(true);
+      return { success: true, playerNumber, playerName, points };
+    } finally {
+      lock.releaseLock();
     }
-    const row = logSheet.getRange(rowNumber, 1, 1, 10).getValues()[0];
-    const [, rowCoach, playerNumber, playerName, , , , points, , deleted] = row;
-    if (String(rowCoach) !== coach) {
-      throw new Error("That attempt no longer matches — can't undo");
-    }
-    if (deleted === true) {
-      throw new Error("That attempt was already undone");
-    }
-    logSheet.getRange(rowNumber, 10).setValue(true);
-    return jsonResponse({ success: true, playerNumber, playerName, points });
-  } finally {
-    lock.releaseLock();
-  }
+  });
+
+  return jsonResponse(data);
 }
 
 // Setting logs a whole batch of balls at once: a fixed count (5/10/15/20/25),
@@ -1040,35 +1079,40 @@ function handleSettingBatch(ss, body) {
   const hitPoints = computeSettingScore(side, true);
   const missPoints = computeSettingScore(side, false);
 
-  const lock = LockService.getScriptLock();
-  lock.waitLock(10000);
-  let playerName, startRow;
-  try {
-    playerName = ensureRosterRow(ss, playerNumber, body.playerName || "");
-    const logSheet = ss.getSheetByName(SHEETS.LOG);
-    const timestamp = new Date();
-    const rows = [];
-    for (let i = 0; i < made; i++) {
-      rows.push([timestamp, coach, playerNumber, playerName, "Setting", side, true, hitPoints, quality, false]);
+  const data = withIdempotency(body.clientId, () => {
+    const lock = LockService.getScriptLock();
+    lock.waitLock(10000);
+    let playerName, startRow;
+    try {
+      playerName = ensureRosterRow(ss, playerNumber, body.playerName || "");
+      const logSheet = ss.getSheetByName(SHEETS.LOG);
+      const timestamp = new Date();
+      const clientId = body.clientId || "";
+      const rows = [];
+      for (let i = 0; i < made; i++) {
+        rows.push([timestamp, coach, playerNumber, playerName, "Setting", side, true, hitPoints, quality, false, clientId]);
+      }
+      for (let i = 0; i < missed; i++) {
+        rows.push([timestamp, coach, playerNumber, playerName, "Setting", side, false, missPoints, quality, false, clientId]);
+      }
+      startRow = logSheet.getLastRow() + 1;
+      if (rows.length) {
+        logSheet.getRange(startRow, 1, rows.length, 11).setValues(rows);
+      }
+    } finally {
+      lock.releaseLock();
     }
-    for (let i = 0; i < missed; i++) {
-      rows.push([timestamp, coach, playerNumber, playerName, "Setting", side, false, missPoints, quality, false]);
-    }
-    startRow = logSheet.getLastRow() + 1;
-    if (rows.length) {
-      logSheet.getRange(startRow, 1, rows.length, 10).setValues(rows);
-    }
-  } finally {
-    lock.releaseLock();
-  }
 
-  try {
-    ensureCoachSheet(ss, coach);
-  } catch (err) {
-    // Non-fatal — the batch above is already safely logged.
-  }
+    try {
+      ensureCoachSheet(ss, coach);
+    } catch (err) {
+      // Non-fatal — the batch above is already safely logged.
+    }
 
-  return jsonResponse({ success: true, playerNumber, playerName, startRow, rowCount: balls, made, missed });
+    return { success: true, playerNumber, playerName, startRow, rowCount: balls, made, missed };
+  });
+
+  return jsonResponse(data);
 }
 
 // Undoes a whole handleSettingBatch() submission as one unit — every row in
@@ -1084,30 +1128,34 @@ function handleUndoBatch(ss, body) {
     throw new Error("Missing coach, startRow, or rowCount for undo");
   }
 
-  const lock = LockService.getScriptLock();
-  lock.waitLock(10000);
-  try {
-    const logSheet = ss.getSheetByName(SHEETS.LOG);
-    if (startRow + rowCount - 1 > logSheet.getLastRow()) {
-      throw new Error("That batch is no longer there to undo");
-    }
-    const rows = logSheet.getRange(startRow, 1, rowCount, 10).getValues();
-    const playerNumber = rows[0][2];
-    const playerName = rows[0][3];
-    for (const row of rows) {
-      const [, rowCoach, , , , , , , , deleted] = row;
-      if (String(rowCoach) !== coach) {
-        throw new Error("That batch no longer matches — can't undo");
+  const data = withIdempotency(body.clientId, () => {
+    const lock = LockService.getScriptLock();
+    lock.waitLock(10000);
+    try {
+      const logSheet = ss.getSheetByName(SHEETS.LOG);
+      if (startRow + rowCount - 1 > logSheet.getLastRow()) {
+        throw new Error("That batch is no longer there to undo");
       }
-      if (deleted === true) {
-        throw new Error("That batch was already undone");
+      const rows = logSheet.getRange(startRow, 1, rowCount, 10).getValues();
+      const playerNumber = rows[0][2];
+      const playerName = rows[0][3];
+      for (const row of rows) {
+        const [, rowCoach, , , , , , , , deleted] = row;
+        if (String(rowCoach) !== coach) {
+          throw new Error("That batch no longer matches — can't undo");
+        }
+        if (deleted === true) {
+          throw new Error("That batch was already undone");
+        }
       }
+      logSheet.getRange(startRow, 10, rowCount, 1).setValue(true);
+      return { success: true, playerNumber, playerName };
+    } finally {
+      lock.releaseLock();
     }
-    logSheet.getRange(startRow, 10, rowCount, 1).setValue(true);
-    return jsonResponse({ success: true, playerNumber, playerName });
-  } finally {
-    lock.releaseLock();
-  }
+  });
+
+  return jsonResponse(data);
 }
 
 // Dispatches to the right scoring function for the skill being logged,

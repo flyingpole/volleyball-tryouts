@@ -233,6 +233,8 @@ async function init() {
     return;
   }
 
+  resumeQueue(); // drain anything left over from a previous page load, independent of roster/coach data below
+
   try {
     const [coaches, players, status] = await Promise.all([
       fetchCoaches(), fetchRoster(), fetchSkillStatus(SKILL).catch(() => ({})),
@@ -356,8 +358,8 @@ function submitAttempt(result) {
   setToast(`✓ #${p.playerNumber} ${p.playerName} — "${result}" (saving…)`, false);
   persistState();
 
-  postAttempt({ coach, playerNumber: p.playerNumber, playerName: p.playerName, skill: SKILL, result })
-    .then((response) => {
+  enqueueAttempt({ coach, playerNumber: p.playerNumber, playerName: p.playerName, skill: SKILL, result }, {
+    onConfirmed: (response) => {
       pushUndoEntry({
         rowNumber: response.rowNumber,
         coach,
@@ -369,18 +371,15 @@ function submitAttempt(result) {
       refreshUI();
       persistState();
       refreshSkillStatus(); // reconcile with the server's actual count — another coach may have logged this same player concurrently
-    })
-    .catch((err) => {
-      if (err.confirmed) {
-        adjustTally(p.playerNumber, -1, -pts);
-        bumpLiveAttempts(p.playerNumber, -1);
-        renderRows();
-        setToast(`⚠ #${p.playerNumber} ${p.playerName} failed to save: ${err.message}`, true);
-      } else {
-        setToast(`⚠ #${p.playerNumber} ${p.playerName}: couldn't confirm save (${err.message}). Check the Log sheet before re-scoring.`, true);
-      }
+    },
+    onRejected: (err) => {
+      adjustTally(p.playerNumber, -1, -pts);
+      bumpLiveAttempts(p.playerNumber, -1);
+      renderRows();
+      setToast(`⚠ #${p.playerNumber} ${p.playerName} failed to save: ${err.message}`, true);
       persistState();
-    });
+    },
+  });
 }
 
 function performUndo() {
@@ -396,24 +395,21 @@ function performUndo() {
   setToast(`↩ Undoing #${undone.playerNumber} ${undone.playerName}…`, false);
   persistState();
 
-  postUndo({ coach: undone.coach, rowNumber: undone.rowNumber })
-    .then(() => {
+  enqueueUndo({ coach: undone.coach, rowNumber: undone.rowNumber }, {
+    onConfirmed: () => {
       setToast(`↩ Undid #${undone.playerNumber} ${undone.playerName} — ${undone.points} pts`, false);
       refreshSkillStatus();
-    })
-    .catch((err) => {
-      if (err.confirmed) {
-        undoStack.unshift(undone);
-        adjustTally(undone.playerNumber, 1, undone.points);
-        bumpLiveAttempts(undone.playerNumber, 1);
-        renderRows();
-        refreshUI();
-        setToast(`Couldn't undo: ${err.message}`, true);
-      } else {
-        setToast(`Couldn't confirm undo (${err.message}). Check the Log sheet.`, true);
-      }
+    },
+    onRejected: (err) => {
+      undoStack.unshift(undone);
+      adjustTally(undone.playerNumber, 1, undone.points);
+      bumpLiveAttempts(undone.playerNumber, 1);
+      renderRows();
+      refreshUI();
+      setToast(`Couldn't undo: ${err.message}`, true);
       persistState();
-    });
+    },
+  });
 }
 
 init();

@@ -191,18 +191,168 @@ async function postJSON(payload) {
   return data;
 }
 
-async function postAttempt(payload) {
-  return postJSON(payload);
+// ---------------------------------------------------------------------------
+// Send queue — every mutating request (logging an attempt, an undo, a
+// Setting batch) goes through this instead of hitting the network directly.
+// A tap enqueues instantly (always succeeds — localStorage-backed, so it
+// survives a reload) and a background loop drains the queue with retries,
+// so a slow or temporarily unreachable Apps Script never blocks the next
+// entry. See README's "Send queue" section for the full design.
+//
+// Each queued item carries a client-generated ID that the server uses to
+// dedupe (see computeSkillStatus/withIdempotency in Code.gs) — a retried
+// request that actually succeeded the first time returns the same cached
+// response instead of writing a second row, which is what makes retrying
+// safe at all.
+// ---------------------------------------------------------------------------
+const QUEUE_KEY = "vbtryouts_send_queue";
+const QUEUE_BASE_DELAY_MS = 2000;
+const QUEUE_MAX_DELAY_MS = 30000;
+const QUEUE_STUCK_AFTER_ATTEMPTS = 8; // show a "not syncing" warning after this many consecutive failures on the item currently at the front
+
+let queueDraining = false;
+let queueConsecutiveFailures = 0;
+const queueCallbacks = {}; // clientId -> { onConfirmed, onRejected } — in-memory only, so callbacks from a previous page load don't survive a reload (see resumeQueue)
+
+function loadQueue() {
+  return loadJSON(QUEUE_KEY, []);
 }
 
-async function postUndo(payload) {
-  return postJSON({ ...payload, action: "undo" });
+function saveQueue(queue) {
+  saveJSON(QUEUE_KEY, queue);
 }
 
-async function postSettingBatch(payload) {
-  return postJSON({ ...payload, action: "logSettingBatch" });
+function makeClientId() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return `c${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-async function postUndoBatch(payload) {
-  return postJSON({ ...payload, action: "undoBatch" });
+// Shows/hides a small "N pending" (or "N not syncing" once stuck) badge —
+// present on every skill page's header if a #queueStatus element exists.
+// Purely informational: lets a coach see the app is behind rather than
+// assume it's broken and revert to paper.
+function refreshQueueStatusUI() {
+  const el = document.getElementById("queueStatus");
+  if (!el) return;
+  const count = loadQueue().length;
+  if (count === 0) {
+    el.hidden = true;
+    el.classList.remove("queue-status-stuck");
+    return;
+  }
+  el.hidden = false;
+  const stuck = queueConsecutiveFailures >= QUEUE_STUCK_AFTER_ATTEMPTS;
+  el.textContent = stuck ? `⚠ ${count} not syncing` : `↻ ${count} pending`;
+  el.classList.toggle("queue-status-stuck", stuck);
+}
+
+// Enqueues a mutating request (payload already shaped exactly like what
+// postJSON expects, action field included where needed — see
+// enqueueAttempt/enqueueUndo/enqueueSettingBatch/enqueueUndoBatch below) and
+// returns its clientId immediately, before anything has been sent. Never
+// throws, never waits on the network. callbacks.onConfirmed(response) fires
+// once the server actually processes it; callbacks.onRejected(err) fires
+// only if the server explicitly rejects it (a validation error — retrying
+// that would fail identically forever, so it's surfaced instead of retried).
+function enqueue(payload, callbacks) {
+  const clientId = makeClientId();
+  const queue = loadQueue();
+  queue.push({ clientId, payload: { ...payload, clientId } });
+  saveQueue(queue);
+  refreshQueueStatusUI();
+  if (callbacks) queueCallbacks[clientId] = callbacks;
+  drainQueue();
+  return clientId;
+}
+
+async function enqueueAttempt(payload, callbacks) {
+  return enqueue(payload, callbacks);
+}
+
+async function enqueueUndo(payload, callbacks) {
+  return enqueue({ ...payload, action: "undo" }, callbacks);
+}
+
+async function enqueueSettingBatch(payload, callbacks) {
+  return enqueue({ ...payload, action: "logSettingBatch" }, callbacks);
+}
+
+async function enqueueUndoBatch(payload, callbacks) {
+  return enqueue({ ...payload, action: "undoBatch" }, callbacks);
+}
+
+// Removes a not-yet-sent item from the queue — used when a coach undoes an
+// attempt before it's even reached the server (very likely exactly when the
+// queue is backed up, i.e. exactly when this matters most), so nothing
+// needs to be sent for it at all. Returns true if it was still queued and
+// got removed; false if it was already sent (or is fully mid-flight),
+// meaning the caller needs to fall back to a real undo request instead.
+function cancelQueued(clientId) {
+  const queue = loadQueue();
+  const idx = queue.findIndex((item) => item.clientId === clientId);
+  if (idx === -1) return false;
+  queue.splice(idx, 1);
+  saveQueue(queue);
+  refreshQueueStatusUI();
+  delete queueCallbacks[clientId];
+  return true;
+}
+
+// Drains the queue one item at a time (never concurrently — this preserves
+// submission order, which undo's "most recent" semantics depend on, and
+// avoids piling parallel requests onto Apps Script's single script-wide
+// lock from this same device). A transient failure (network/timeout) backs
+// off and retries the SAME item rather than advancing past it; a permanent
+// rejection from the server drops it and calls onRejected instead of
+// retrying forever.
+async function drainQueue() {
+  if (queueDraining) return;
+  queueDraining = true;
+  try {
+    for (;;) {
+      const queue = loadQueue();
+      if (!queue.length) break;
+      const item = queue[0];
+      try {
+        const response = await postJSON(item.payload);
+        queueConsecutiveFailures = 0;
+        const cb = queueCallbacks[item.clientId];
+        delete queueCallbacks[item.clientId];
+        const remaining = loadQueue();
+        remaining.shift();
+        saveQueue(remaining);
+        refreshQueueStatusUI();
+        if (cb && cb.onConfirmed) cb.onConfirmed(response);
+      } catch (err) {
+        if (err.confirmed) {
+          const cb = queueCallbacks[item.clientId];
+          delete queueCallbacks[item.clientId];
+          const remaining = loadQueue();
+          remaining.shift();
+          saveQueue(remaining);
+          queueConsecutiveFailures = 0;
+          refreshQueueStatusUI();
+          if (cb && cb.onRejected) cb.onRejected(err);
+          continue;
+        }
+        queueConsecutiveFailures += 1;
+        refreshQueueStatusUI();
+        const delay = Math.min(QUEUE_BASE_DELAY_MS * Math.pow(1.6, queueConsecutiveFailures - 1), QUEUE_MAX_DELAY_MS);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  } finally {
+    queueDraining = false;
+  }
+}
+
+// Resumes draining anything left over from a previous page load (e.g. the
+// coach closed the tab mid-sync) — call once from each page's init(). These
+// leftover items have no callbacks (that page session is gone), so they're
+// sent silently in the background; the live skillStatus poll picks up their
+// effect within its own refresh interval regardless of whether this exact
+// tab is still open.
+function resumeQueue() {
+  refreshQueueStatusUI();
+  drainQueue();
 }

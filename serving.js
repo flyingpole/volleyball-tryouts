@@ -253,6 +253,8 @@ async function init() {
     return;
   }
 
+  resumeQueue(); // drain anything left over from a previous page load, independent of roster/coach data below
+
   try {
     const [coaches, players, status] = await Promise.all([
       fetchCoaches(), fetchRoster(), fetchSkillStatus(SKILL).catch(() => ({})),
@@ -397,8 +399,8 @@ function submitAttempt(result, hitTarget) {
   setToast(`✓ #${p.playerNumber} ${p.playerName} — ${pts} pts (saving…)`, false);
   persistState();
 
-  postAttempt({ coach, playerNumber: p.playerNumber, playerName: p.playerName, skill: SKILL, result, hitTarget })
-    .then((response) => {
+  enqueueAttempt({ coach, playerNumber: p.playerNumber, playerName: p.playerName, skill: SKILL, result, hitTarget }, {
+    onConfirmed: (response) => {
       pushUndoEntry({
         rowNumber: response.rowNumber,
         coach,
@@ -410,23 +412,16 @@ function submitAttempt(result, hitTarget) {
       refreshUI();
       persistState();
       refreshSkillStatus(); // reconcile with the server's actual count — another coach may have logged this same player concurrently
-    })
-    .catch((err) => {
-      if (err.confirmed) {
-        // The server explicitly rejected it — nothing was written, safe to roll back.
-        adjustTally(p.playerNumber, -1, -pts);
-        bumpLiveAttempts(p.playerNumber, -1);
-        renderRows();
-        setToast(`⚠ #${p.playerNumber} ${p.playerName} failed to save: ${err.message}`, true);
-      } else {
-        // Couldn't confirm either way (network/CORS hiccup) — Apps Script may
-        // well have written the row despite the request looking like it
-        // failed here. Leave the tally as-is rather than risk a double-submit
-        // from re-scoring something that actually saved.
-        setToast(`⚠ #${p.playerNumber} ${p.playerName}: couldn't confirm save (${err.message}). Check the Log sheet before re-scoring.`, true);
-      }
+    },
+    onRejected: (err) => {
+      // The server explicitly rejected it — nothing was written, safe to roll back.
+      adjustTally(p.playerNumber, -1, -pts);
+      bumpLiveAttempts(p.playerNumber, -1);
+      renderRows();
+      setToast(`⚠ #${p.playerNumber} ${p.playerName} failed to save: ${err.message}`, true);
       persistState();
-    });
+    },
+  });
 }
 
 function performUndo() {
@@ -443,28 +438,23 @@ function performUndo() {
   setToast(`↩ Undoing #${undone.playerNumber} ${undone.playerName}…`, false);
   persistState();
 
-  postUndo({ coach: undone.coach, rowNumber: undone.rowNumber })
-    .then(() => {
+  enqueueUndo({ coach: undone.coach, rowNumber: undone.rowNumber }, {
+    onConfirmed: () => {
       setToast(`↩ Undid #${undone.playerNumber} ${undone.playerName} — ${undone.points} pts`, false);
       refreshSkillStatus();
-    })
-    .catch((err) => {
-      if (err.confirmed) {
-        // Server explicitly rejected the undo — it definitely didn't happen,
-        // safe to put the entry back and restore the tally.
-        undoStack.unshift(undone);
-        adjustTally(undone.playerNumber, 1, undone.points);
-        bumpLiveAttempts(undone.playerNumber, 1);
-        renderRows();
-        refreshUI();
-        setToast(`Couldn't undo: ${err.message}`, true);
-      } else {
-        // Couldn't confirm either way — it may have gone through despite the
-        // request looking failed here, so don't restore it optimistically.
-        setToast(`Couldn't confirm undo (${err.message}). Check the Log sheet.`, true);
-      }
+    },
+    onRejected: (err) => {
+      // Server explicitly rejected the undo — it definitely didn't happen,
+      // safe to put the entry back and restore the tally.
+      undoStack.unshift(undone);
+      adjustTally(undone.playerNumber, 1, undone.points);
+      bumpLiveAttempts(undone.playerNumber, 1);
+      renderRows();
+      refreshUI();
+      setToast(`Couldn't undo: ${err.message}`, true);
       persistState();
-    });
+    },
+  });
 }
 
 init();

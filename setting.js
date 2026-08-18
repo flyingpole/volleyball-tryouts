@@ -313,6 +313,8 @@ async function init() {
     return;
   }
 
+  resumeQueue(); // drain anything left over from a previous page load, independent of roster/coach data below
+
   try {
     const [coaches, players, status] = await Promise.all([
       fetchCoaches(), fetchRoster(), fetchSkillStatus(SKILL).catch(() => ({})),
@@ -456,8 +458,8 @@ function submitBatch(side) {
   setToast(`✓ #${p.playerNumber} ${p.playerName} — ${label} (saving…)`, false);
   persistState();
 
-  postSettingBatch({ coach, playerNumber: p.playerNumber, playerName: p.playerName, side, balls, made, quality })
-    .then((response) => {
+  enqueueSettingBatch({ coach, playerNumber: p.playerNumber, playerName: p.playerName, side, balls, made, quality }, {
+    onConfirmed: (response) => {
       pushUndoEntry({
         startRow: response.startRow,
         rowCount: response.rowCount,
@@ -472,18 +474,15 @@ function submitBatch(side) {
       refreshUI();
       persistState();
       refreshSkillStatus();
-    })
-    .catch((err) => {
-      if (err.confirmed) {
-        adjustTally(p.playerNumber, -balls, -made);
-        renderRows();
-        setToast(`⚠ #${p.playerNumber} ${p.playerName} failed to save: ${err.message}`, true);
-      } else {
-        setToast(`⚠ #${p.playerNumber} ${p.playerName}: couldn't confirm save (${err.message}). Check the Log sheet before re-scoring.`, true);
-      }
+    },
+    onRejected: (err) => {
+      adjustTally(p.playerNumber, -balls, -made);
+      renderRows();
+      setToast(`⚠ #${p.playerNumber} ${p.playerName} failed to save: ${err.message}`, true);
       refreshSkillStatus(); // discard the optimistic guess above, resync with the server's actual state
       persistState();
-    });
+    },
+  });
 }
 
 function performUndo() {
@@ -499,24 +498,21 @@ function performUndo() {
   setToast(`↩ Undoing #${undone.playerNumber} ${undone.playerName}'s ${undone.side} batch…`, false);
   persistState();
 
-  postUndoBatch({ coach: undone.coach, startRow: undone.startRow, rowCount: undone.rowCount })
-    .then(() => {
+  enqueueUndoBatch({ coach: undone.coach, startRow: undone.startRow, rowCount: undone.rowCount }, {
+    onConfirmed: () => {
       setToast(`↩ Undid #${undone.playerNumber} ${undone.playerName}'s ${undone.side} ${undone.made}/${undone.rowCount}`, false);
       refreshSkillStatus(); // this side's status may have reverted to an earlier batch or cleared entirely
-    })
-    .catch((err) => {
-      if (err.confirmed) {
-        undoStack.unshift(undone);
-        adjustTally(undone.playerNumber, undone.rowCount, undone.made);
-        renderRows();
-        applyBatchFieldState();
-        refreshUI();
-        setToast(`Couldn't undo: ${err.message}`, true);
-      } else {
-        setToast(`Couldn't confirm undo (${err.message}). Check the Log sheet.`, true);
-      }
+    },
+    onRejected: (err) => {
+      undoStack.unshift(undone);
+      adjustTally(undone.playerNumber, undone.rowCount, undone.made);
+      renderRows();
+      applyBatchFieldState();
+      refreshUI();
+      setToast(`Couldn't undo: ${err.message}`, true);
       persistState();
-    });
+    },
+  });
 }
 
 init();

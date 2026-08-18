@@ -24,6 +24,53 @@ The vibration doesn't work on iPhones — Apple has never implemented the
 Vibration API in Safari or Chrome-on-iOS (same underlying engine on iOS) — it
 silently does nothing there. The color flash works everywhere.
 
+## Send queue (every page)
+
+Every scoring tap, undo, and Setting batch is written to a local send queue
+(in `localStorage`) the instant you tap — it never waits on the network. A
+single background loop drains that queue in order, retrying with backoff
+(2s, growing up to a 30s cap) whenever the Apps Script is slow, unreachable,
+or Wi-Fi drops. This replaced an earlier design where a failed save could
+block the next tap and silently lose data — the exact problem that forced
+coaches back to paper tracking on Digging and fast-tempo Attacking on Day 1.
+
+What you'll see:
+
+- **`↻ N pending`** badge next to the header menu — how many taps haven't
+  reached the Sheet yet. It clears on its own once they land; a few seconds
+  of "pending" during a busy stretch is normal and doesn't mean anything is
+  wrong.
+- **`⚠ N not syncing`** (badge turns red) — only appears after 8 straight
+  failed attempts to reach the Apps Script. This means something is
+  genuinely wrong (no signal, Wi-Fi down, or the Web App URL is stale) — get
+  the device back online and the queue keeps retrying the same items, in
+  order, with nothing lost.
+- Every tap still shows its own **"saving…"** toast that flips to a
+  confirmed checkmark, or an error, once the server responds — the queue
+  doesn't change what a single tap looks like, only what happens to it while
+  it's in flight.
+
+Two outcomes once a queued item is actually sent:
+
+- **Confirmed** — the server accepted it. The undo entry is added (so UNDO
+  only ever targets attempts the Sheet actually has) and the on-screen tally
+  updates from the server's numbers.
+- **Rejected** — the server explicitly said no (a real validation failure,
+  not a network hiccup). The optimistic tally is rolled back and an error
+  toast explains why. This is rare and different from a network failure,
+  which the queue retries automatically instead of surfacing to you.
+
+Retries are safe to repeat: each queued item carries a unique client-
+generated ID, and the backend recognizes a retried ID and returns the
+original result instead of logging (or undoing) it a second time — see
+"Idempotent retries" under Troubleshooting below. Undoing a tap that's still
+sitting in the queue (not yet confirmed) isn't supported yet — UNDO only
+works on attempts the Sheet has already confirmed.
+
+Reloading or closing the page doesn't lose anything queued — the queue lives
+in `localStorage`, and reopening the page resumes draining wherever it left
+off.
+
 ## The header menu (every page)
 
 Tap **⋮** next to "← Skills" to open a small panel with two things, shared
@@ -503,6 +550,26 @@ dropdown (no redeploy needed) — it looks up each broken row's Points value
 should have been (`1` → `+`, `0` → `.`, `-1` → `-`) and rewrites just that
 cell, for every skill listed in `PLUS_MINUS_SKILLS`. Safe to run more than
 once.
+
+### Idempotent retries (Client ID column)
+
+Because the send queue (see above) retries any tap that didn't get a clean
+response, the same attempt could in theory reach the Apps Script twice — for
+example if the write actually succeeded but the confirmation response got
+lost on a flaky connection. To make retries safe, every queued item carries
+a client-generated ID, and the backend caches each ID's result for 6 hours
+(`CacheService`, in `withIdempotency()` in `Code.gs`). A retried ID returns
+the original cached result instead of logging or undoing the row again — so
+a shaky connection can never double-count an attempt.
+
+`Log` also has a permanent **Client ID** column, written alongside every row,
+purely for manual debugging (e.g. spotting a genuine duplicate vs. a safe
+retry by eye). It isn't read on the hot path — only the 6-hour cache is.
+
+If you're upgrading from a version of `Code.gs` before this feature, paste
+the updated file into the Apps Script editor, redeploy (**Deploy → Manage
+deployments → Edit → New version**), and re-run `setupSheet()` to add the
+new column and its Plain Text formatting.
 
 ## Local development
 

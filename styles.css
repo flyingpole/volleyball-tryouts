@@ -76,6 +76,25 @@ header.top.compact h1 {
   gap: 10px;
 }
 
+/* Send-queue status badge — shown whenever there are unsent attempts
+   sitting locally, so a coach can see the app is behind (and still
+   working) rather than assume it's broken. Turns solid red after several
+   consecutive failed retries on the item at the front of the queue. */
+.queue-status {
+  font-size: 0.6rem;
+  font-weight: 800;
+  padding: 3px 7px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffe9b3;
+  white-space: nowrap;
+}
+
+.queue-status-stuck {
+  background: var(--red);
+  color: white;
+}
+
 .menu-btn {
   position: relative;
   background: rgba(255, 255, 255, 0.12);
